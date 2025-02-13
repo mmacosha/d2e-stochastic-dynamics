@@ -1,0 +1,7 @@
+# System and IDE files
+.DS_Store
+.idea/
+*/.ipynb_checkpoints/
+
+# folders with images and data
+figures
