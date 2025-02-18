@@ -1,7 +1,13 @@
 # System and IDE files
 .DS_Store
 .idea/
-*/.ipynb_checkpoints/
+.vscode/
+**/.ipynb_checkpoints/
+**/__pycache__
+
+# exp tracking
+wandb/
+outputs/
 
 # folders with images and data
 figures

@@ -1,0 +1,28 @@
+defaults:
+  - _self_
+  - sampler: sb
+
+exp:
+  name: sb-experiment
+  project: sb
+  mode: online
+
+data:
+  p_0: 
+    name: swiss_roll
+    args: [null, 0.1]
+  p_1:
+    name: s_curve
+    args: [null, 0.1]
+
+models:
+  fwd:
+    t_emb_size: 64
+    x_emb_size: 64
+    n_main_body_layers: 3
+    predict_log_var: true
+  bwd:
+    t_emb_size: 64
+    x_emb_size: 64
+    n_main_body_layers: 3
+    predict_log_var: true
