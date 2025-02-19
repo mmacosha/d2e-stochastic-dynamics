@@ -23,6 +23,18 @@ class ModelOutput(collections.UserDict):
     
     def contains(self, name) -> bool:
         return name in self.data
+    
+    def detach(self):
+        for name, value in self.data.items():
+            self.data[name] = value.detach()
+    
+    def cpu(self):
+        for name, value in self.data.items():
+            self.data[name] = value.cpu()
+    
+    def cuda(self, device=None):
+        for name, value in self.data.items():
+            self.data[name] = value.cuda(device)
 
 
 class SimpleNet(nn.Module):

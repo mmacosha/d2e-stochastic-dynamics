@@ -73,12 +73,10 @@ def mix_of_gaussians(batch_size, means=None, sigmas=None):
         # means = torch.tensor(means)
         z = torch.randn(batch_size // means.size(0), means.size(0), 2)
         return (z + means).view(-1, 2)
+    
 
     assert batch_size % sigmas.size(0) == 0, 'batch size should be divisible by the number of modes'
-    # means = torch.tensor(means)
-    # sigmas = torch.tensor(sigmas)
     z = torch.randn(batch_size // means.size(0), means.size(0), 2)
-
     return (z * sigmas + means).view(-1, 2)
 
 
