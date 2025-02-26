@@ -1,5 +1,10 @@
+import inspect
+import functools
+
 import numpy as np
 import matplotlib.pyplot as plt
+
+
 
 
 class EMALoss:
@@ -60,10 +65,6 @@ def plot_graph(graph):
     figure = plt.figure(figsize=(5, 3))
     plt.plot(graph)
     return figure
-
-
-import functools
-import inspect
 
 
 def build_config(init_func):

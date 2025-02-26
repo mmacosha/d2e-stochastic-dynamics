@@ -7,7 +7,8 @@ from torch import nn
 
 def fourier_proj(time, embed_dim, max_dim=1e4):
     max_log_dim = math.log(max_dim) / (embed_dim // 2 - 1)
-    embeddings = time[:, None] * torch.exp(torch.arange(embed_dim // 2) * (- max_log_dim))[None, :]
+    embeddings = torch.arange(embed_dim // 2, device=time.device) * (- max_log_dim)
+    embeddings = time[:, None] * torch.exp(embeddings)[None, :]
     return torch.cat([torch.sin(embeddings), torch.cos(embeddings)], dim=-1)
 
 
@@ -77,7 +78,6 @@ class SimpleNet(nn.Module):
 
         if self.predict_log_var:
             self.log_var_head = nn.Linear(x_emb_size, 2)
-            # self.log_var_head.weight.data_ = torch.zeros_like(self.log_var_head.weight.data_)
 
     def forward(self, x, t):
         embeddings = self.x_embed(x)

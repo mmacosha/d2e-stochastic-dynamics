@@ -12,18 +12,14 @@ from samplers import losses
 from model import ModelOutput
 
 
-def make_euler_maruyama_step(x, t, dt, model, no_grad: bool = True):        
+def get_mean_log_var(model, x, t, dt):
     log_var = torch.as_tensor(2.0 * dt).log()
-    z = torch.randn_like(x)
-
-    with torch.set_grad_enabled(not no_grad):
-        output = model(x, t)
-    
+    output = model(x, t)
     if output.contains('log_var'):
         log_var = log_var + output.log_var
-
+    
     mean = x + output.drift * dt
-    return mean + log_var.exp().sqrt() * z
+    return mean, log_var
 
 
 class ReferenceProcess:
@@ -87,7 +83,8 @@ class SBTrainer:
             threshold=self.config.threshold, 
             max_iter=self.config.max_num_iters_per_step, 
         )
-
+        dt = self.config.gamma
+        
         with tqdm(leave=False, desc=f'step {curr_iter + 1}, training F model') as pbar:
             while var_crit.check():
                 traj_loss = 0
@@ -99,35 +96,30 @@ class SBTrainer:
                         steps=self.config.n_sampling_steps
                     ).flip(-1):
                     t = torch.ones(self.config.batch_size) * t_step
-                    
-                    x_t_m_dt = make_euler_maruyama_step(
-                        x_t, t, self.config.gamma, 
-                        self.reference_process if curr_iter == 0 else self.fwd_model,
-                        no_grad=True
-                    )
-                    loss = losses.compute_fwd_log_likelihood_loss(
-                        self.fwd_model, x_t, x_t_m_dt, t, self.config.gamma,
-                    )
 
-                    loss.backward()
-                    traj_loss += loss.item()
+                    with torch.no_grad():
+                        bwd_mean, bwd_log_var = get_mean_log_var(
+                            self.reference_process if curr_iter == 0 else self.bwd_model,
+                            x_t, t, self.config.gamma
+                        )
+                        x_t_m_dt = bwd_mean \
+                            + torch.rand_like(bwd_log_var) * bwd_log_var.exp().sqrt()
+
+                    fwd_mean, fwd_log_var = get_mean_log_var(self.fwd_model, x_t_m_dt, t - dt, dt)
+                    loss = losses.log_normal_density(x_t, fwd_mean, fwd_log_var)
+
+                    (-loss).mean().backward()
+                    traj_loss += (-loss).mean().item()
 
                     x_t = x_t_m_dt
+                run.log({f"train/forward_loss_{curr_iter}": traj_loss})
 
                 ema_loss.update(traj_loss / self.config.n_sampling_steps)
                 self.fwd_optimizer.step()
 
                 pbar.update(1)
             pbar.close()
-        
-        run.log(
-            {
-                'train/forward_loss': wandb.Image(utils.plot_graph(ema_loss.loss)),
-                'train/forward_ema_loss': wandb.Image(utils.plot_graph(ema_loss.ema)),
-            }, 
-            step=curr_iter
-        )
-
+         
     def train_backward(self, curr_iter: int, run):
         ema_loss = utils.EMALoss()
         var_crit = utils.VarCriterion(
@@ -136,6 +128,7 @@ class SBTrainer:
             threshold=self.config.threshold, 
             max_iter=self.config.max_num_iters_per_step,
         )
+        dt = self.config.gamma
 
         with tqdm(leave=False, desc=f'step {curr_iter + 1}, training B model') as pbar:
             while var_crit.check():
@@ -149,17 +142,22 @@ class SBTrainer:
                     ).flip(-1):
                     t = torch.ones(self.config.batch_size) * t_step
                     
-                    x_t = make_euler_maruyama_step(
-                        x_t_m_dt, t - self.config.gamma, self.config.gammaself.fwd_model
-                    )
-                    loss = losses.compute_bwd_log_likelihood_loss(
-                        self.bwd_model, x_t, x_t_m_dt, t, self.config.gamma
-                    )
+                    with torch.no_grad():
+                        fwd_mean, fwd_log_var = get_mean_log_var(
+                            self.fwd_model, x_t_m_dt, t - dt, dt
+                        )
+                        x_t = fwd_mean \
+                            + torch.randn_like(fwd_log_var) * fwd_log_var.exp().sqrt()
+                    
+                    bwd_mean, bwd_log_var = get_mean_log_var(self.bwd_model, x_t, t, dt)
+                    loss = losses.log_normal_density(x_t_m_dt, bwd_mean, bwd_log_var)                        
 
-                    loss.backward()
-                    traj_loss += loss.item()
+                    (-loss).mean().backward()
+                    traj_loss += (-loss).mean().item()
 
-                run.log({f"tain/backward_loss_{curr_iter}": traj_loss})
+                    x_t_m_dt = x_t
+                
+                run.log({f"train/backward_loss_{curr_iter}": traj_loss})
 
                 ema_loss.update(traj_loss / self.config.n_sampling_steps)
                 self.bwd_optimizer.step()
@@ -167,39 +165,32 @@ class SBTrainer:
                 pbar.update(1)
             pbar.close()
 
-        run.log(
-            {
-                'train/backward_loss': wandb.Image(utils.plot_graph(ema_loss.loss)), 
-                'train/backward_ema_loss': wandb.Image(utils.plot_graph(ema_loss.ema))
-            }, 
-            step=curr_iter
-        )
-
     @torch.no_grad()
     def sample_backward(self, curr_step, run=None, return_trajectory=False):
         x_0, x_1 = self.data_sampler.sample(self.config.batch_size)
+        dt = self.config.gamma
 
-        trajectory, timesteps = [x_0], []
+        trajectory, timesteps = [x_1], []
         for t_step in torch.linspace(
-                0, self.config.t_max - self.config.gamma, 
-                self.config.n_sampling_steps
-            ):
+                self.config.gamma, self.config.t_max, self.config.n_sampling_steps
+            ).flip(-1):
+            
             timesteps.append(t_step.item())
-            t = torch.ones(x_0.size(0)) * t_step
-            x_next = make_euler_maruyama_step(
-                trajectory[-1], t, self.config.gamma, 
-                f=self.bwd_model
-            )
+            t = torch.ones(x_1.size(0)) * t_step
+
+            bwd_mean, bwd_log_var = get_mean_log_var(self.bwd_model, trajectory[-1], t, dt)
+            x_next = bwd_mean + torch.rand_like(bwd_log_var) * bwd_log_var.exp().sqrt()
             trajectory.append(x_next)
-        timesteps.append(self.config.t_max)
+        
+        timesteps.append(0)
 
         timesteps.append('target')
-        trajectory.append(x_1)
+        trajectory.append(x_0)
 
         figure = utils.plot_trajectory(trajectory, timesteps)
 
         if run is not None:
-            run.log({'train/backward_trajectory': wandb.Image(figure)}, step=curr_step)
+            run.log({'images/backward_trajectory': wandb.Image(figure)}, step=curr_step)
 
         if return_trajectory:
             return trajectory
@@ -207,31 +198,30 @@ class SBTrainer:
     @torch.no_grad()
     def sampler_forward(self, curr_step, run=None, return_trajectory=False):
         x_0, x_1 = self.data_sampler.sample(self.config.batch_size)
+        dt = self.config.gamma
 
-        trajectory, timesteps = [x_1], []
-        with torch.no_grad():
-            for t_step in torch.linspace(
-                    self.config.gamma, 
-                    self.config.t_max, 
-                    self.config.n_sampling_steps
-                ).flip(-1):
-                timesteps.append(t_step.item())
-                t = torch.ones(x_0.size(0)) * t_step
-                x_next = make_euler_maruyama_step(
-                    trajectory[-1], t, self.config.gamma, 
-                    f=self.fwd_model
-                )
-                trajectory.append(x_next)
-        timesteps.append(0)
+        trajectory, timesteps = [x_0], []
+        for t_step in torch.linspace(
+                0, self.config.t_max - dt, self.config.n_sampling_steps
+            ):
+            
+            timesteps.append(t_step.item())
+            t = torch.ones(x_0.size(0)) * t_step
+
+            fwd_mean, fwd_log_var = get_mean_log_var(self.fwd_model, trajectory[-1], t, dt)
+            x_next = fwd_mean + torch.randn_like(fwd_log_var) * fwd_log_var.exp().sqrt()
+            trajectory.append(x_next)
+        
+        timesteps.append(self.config.t_max)
 
         timesteps.append('target')
-        trajectory.append(x_0)
+        trajectory.append(x_1)
 
         figure = utils.plot_trajectory(trajectory, timesteps)
         
         if run is not None:
-            run.log({'train/forward_trajectory': wandb.Image(figure)}, step=curr_step)
-
+            run.log({'images/forward_trajectory': wandb.Image(figure)}, step=curr_step)
+        
         if return_trajectory:
             return trajectory
 

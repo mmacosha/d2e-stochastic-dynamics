@@ -1,41 +1,141 @@
 import torch
 
+from samplers import utils
+
 
 def log_normal_density(x, mean, log_var):
-    return - 0.5 * (log_var + torch.exp(- log_var) * (mean - x).pow(2))
+    """Compute log dencity normal distribution."""
+    return - 0.5 * (log_var + torch.exp(- log_var) * (mean - x).pow(2)).sum(-1)
 
 
-def compute_fwd_log_likelihood_loss(model, x_t, x_t_m_dt, t, dt):
-    r"""
-        Compute log p( x_{t} | x_{t-dt} ) with the following logic:
-        DRIFT, VAR = model( x_{t-dt}, t-dt )
-        log p( x_{t} | x_{t-dt} ) = log N( x_{t} | x_{t-dt} + DRIFT * dt, VAR )
-    """
-    log_var = torch.as_tensor(2.0 * dt).log()
+def compute_fwd_tlm_loss(fwd_model, bwd_model, x_1, dt, 
+                         t_max, n_steps, backward: bool = True):
+    r"""Compute forward trajectory likelihood."""
+    x_t = x_1
+    traj_loss = 0
+
+    for t_step in torch.linspace(dt, t_max, n_steps).flip(-1):
+        t = torch.ones(512) * t_step
+        
+        with torch.no_grad():
+            bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, x_t, t, dt)
+            x_t_m_dt = bwd_mean + torch.randn_like(bwd_mean) * bwd_log_var.exp().sqrt()
+        
+        fwd_mean, fwd_log_var = utils.get_mean_log_var(fwd_model, x_t_m_dt, t - dt, dt)
+        loss = log_normal_density(x_t, fwd_mean, fwd_log_var)                        
+        
+        if backward:
+            (-loss).mean().backward()
+        
+        traj_loss = traj_loss + (-loss).mean()
+        x_t = x_t_m_dt
     
-    output = model(x_t_m_dt, t - dt)
-    mean_pred = x_t_m_dt + dt * output.drift
+    return traj_loss
 
-    if output.contains('log_var'):
-        log_var = output.log_var + log_var
+
+def compute_bwd_tlm_loss(fwd_model, bwd_model, x_0, dt, 
+                         t_max, n_steps, backward: bool = True):
+    r"""Compute backward trajectory likelihood."""
+    x_t_m_dt = x_0
+    traj_loss = 0
+
+    for t_step in torch.linspace(dt, t_max, n_steps):
+        t = torch.ones(512) * t_step
+        
+        with torch.no_grad():
+            bwd_mean, bwd_log_var = utils.get_mean_log_var(fwd_model, x_t_m_dt, 
+                                                           t - dt, dt)
+            x_t = bwd_mean + torch.randn_like(bwd_mean) * bwd_log_var.exp().sqrt()
+        
+        bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, x_t, t, dt)
+        loss = log_normal_density(x_t_m_dt, bwd_mean, bwd_log_var)                        
+        
+        if backward:
+            (-loss).mean().backward()
+        
+        traj_loss = traj_loss + (-loss).mean()
+        x_t_m_dt = x_t
     
-    loss = - log_normal_density(x_t, mean_pred, log_var)
-    return loss.mean()
+    return traj_loss
 
 
-def compute_bwd_log_likelihood_loss(model, x_t, x_t_m_dt, t, dt):
-    r"""
-        Compute log p( x_{t-dt} | x_{t} ) with the following logic:
-        DRIFT, VAR = model( x_{t}, t )
-        log p( x_{t-dt} | x_{t} ) = log N( x_{t-dt} | x_{t} + DRIFT * dt, VAR )
-    """
-    log_var = torch.tensor(2.0 * dt).log()
+def compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, x, dt, t_max, 
+                                  num_t_steps, p1_buffer = None, device: str = 'cpu'):
+    fwd_tl_sum, bwd_tl_sum = 0, 0
+    x_t_m_dt = x
 
-    output = model(x_t, t)
-    mean_pred = x_t + dt * output.drift
+    for t_step in torch.linspace(dt, t_max, num_t_steps):
+        t = torch.ones(x_t_m_dt.size(0), device=device) * t_step
 
-    if output.contains('log_var'):
-        log_var = output.log_var + log_var
+        # COMPUTE FORWARD LOSS
+        fwd_mean, fwd_log_var = utils.get_mean_log_var(fwd_model, x_t_m_dt, t - dt, dt)
+        with torch.no_grad():
+            x_t = fwd_mean + fwd_log_var.exp().sqrt() * torch.randn_like(fwd_log_var)
+        
+        fwd_tl_sum = fwd_tl_sum + log_normal_density(x_t, fwd_mean, fwd_log_var)
 
-    loss = - log_normal_density(x_t_m_dt, mean_pred, log_var)
-    return loss.mean()
+        # COMPUTE BACKWARD LOSS
+        with torch.no_grad():
+            bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, x_t, t, dt)
+            bwd_tl_sum = bwd_tl_sum + log_normal_density(x_t_m_dt, bwd_mean, bwd_log_var)
+
+        x_t_m_dt = x_t
+    bwd_tl_sum = bwd_tl_sum + log_p_1(x_t_m_dt)
+
+    if p1_buffer is not None:
+        p1_buffer.update(x_t_m_dt, fraction=0.2)
+
+    return  fwd_tl_sum - bwd_tl_sum
+
+
+def compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p_0, x, dt, t_max, 
+                                  num_t_steps, p0_buffer = None, device: str = 'cpu'):
+    fwd_tl_sum, bwd_tl_sum = 0, 0
+    x_t = x
+
+    for t_step in torch.linspace(dt, t_max, num_t_steps).flip(-1):
+        t = torch.ones(x_t.size(0), device=device) * t_step
+
+        # COMPUTE BACKWARD LOSS
+        bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, x_t, t, dt)
+
+        with torch.no_grad():
+            x_t_m_dt = bwd_mean + bwd_log_var.exp().sqrt() * torch.randn_like(bwd_log_var)
+
+        bwd_tl_sum = bwd_tl_sum + log_normal_density(x_t_m_dt, bwd_mean, bwd_log_var)
+
+        # COMPUTE FORWARD LOSS
+        with torch.no_grad():
+            fwd_mean, fwd_log_var = utils.get_mean_log_var(fwd_model, x_t_m_dt, t - dt, dt)
+            fwd_tl_sum = fwd_tl_sum + log_normal_density(x_t, fwd_mean, fwd_log_var)
+
+        x_t = x_t_m_dt
+    
+    fwd_tl_sum = fwd_tl_sum + log_p_0(x_t)
+
+    if p0_buffer is not None:
+        p0_buffer.update(x_t, fraction=0.2)
+
+    return  fwd_tl_sum - bwd_tl_sum
+
+
+def compute_fwd_ctb_loss(fwd_model, bwd_model, log_p_1, x, dt, 
+                         t_max, num_t_steps, p1_buffer = None):
+    log_1 = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, x, dt, t_max, 
+                                          num_t_steps, p1_buffer=p1_buffer)
+
+    log_2 = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, x, dt, t_max, 
+                                          num_t_steps, p1_buffer=None)
+
+    return (log_1 - log_2).pow(2).mean()
+
+
+def compute_bwd_ctb_loss(fwd_model, bwd_model, log_p0, x, dt, 
+                         t_max, num_t_steps, p0_buffer = None):
+    log_1 = compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p0, x, dt, t_max, 
+                                          num_t_steps, p0_buffer=p0_buffer)
+
+    log_2 = compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p0, x, dt, t_max, 
+                                          num_t_steps, p0_buffer=None)
+
+    return (log_1 - log_2).pow(2).mean()
