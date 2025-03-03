@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - sampler: sb
+  - sampler: d2d_sb
 
 exp:
   name: sb-experiment
@@ -10,10 +10,14 @@ exp:
 data:
   p_0: 
     name: swiss_roll
-    args: [null, 0.1]
+    args: 
+      shift: null
+      noise: 0.1
   p_1:
-    name: s_curve
-    args: [null, 0.1]
+    name: mix_of_gaussians
+    args: 
+      means: [[-0.7, 0.7],[-0.7, -0.7],[0.7, 0.7],[0.7, -0.7]]
+      sigmas: [[0.1, 0.1],[0.1, 0.1],[0.1, 0.1],[0.1, 0.1]]
 
 models:
   fwd:

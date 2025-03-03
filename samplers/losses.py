@@ -88,34 +88,43 @@ def compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, x, dt, t_max,
     return  fwd_tl_sum - bwd_tl_sum
 
 
-def compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p_0, x, dt, t_max, 
-                                  num_t_steps, p0_buffer = None, device: str = 'cpu'):
+def compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p, x, dt, t_max, 
+                                  num_t_steps, p0_buffer = None,
+                                  return_x: bool = False, learn_bwd: bool = True):
     fwd_tl_sum, bwd_tl_sum = 0, 0
     x_t = x
 
+    if not learn_bwd:
+        bwd_tl_sum = bwd_tl_sum + log_p(x_t)
+
     for t_step in torch.linspace(dt, t_max, num_t_steps).flip(-1):
-        t = torch.ones(x_t.size(0), device=device) * t_step
+        t = torch.ones(x_t.size(0), device=x_t.device) * t_step
 
         # COMPUTE BACKWARD LOSS
-        bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, x_t, t, dt)
+        with torch.set_grad_enabled(learn_bwd):
+            bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, x_t, t, dt)
 
-        with torch.no_grad():
-            x_t_m_dt = bwd_mean + bwd_log_var.exp().sqrt() * torch.randn_like(bwd_log_var)
+            with torch.no_grad():
+                x_t_m_dt = bwd_mean + bwd_log_var.exp().sqrt() * torch.randn_like(bwd_log_var)
 
-        bwd_tl_sum = bwd_tl_sum + log_normal_density(x_t_m_dt, bwd_mean, bwd_log_var)
+            bwd_tl_sum = bwd_tl_sum + log_normal_density(x_t_m_dt, bwd_mean, bwd_log_var)
 
         # COMPUTE FORWARD LOSS
-        with torch.no_grad():
+        with torch.set_grad_enabled(not learn_bwd):
             fwd_mean, fwd_log_var = utils.get_mean_log_var(fwd_model, x_t_m_dt, t - dt, dt)
             fwd_tl_sum = fwd_tl_sum + log_normal_density(x_t, fwd_mean, fwd_log_var)
 
         x_t = x_t_m_dt
     
-    fwd_tl_sum = fwd_tl_sum + log_p_0(x_t)
+    if learn_bwd:
+        fwd_tl_sum = fwd_tl_sum + log_p(x_t)
 
     if p0_buffer is not None:
         p0_buffer.update(x_t, fraction=0.2)
-
+    
+    if return_x:
+        return fwd_tl_sum - bwd_tl_sum, x_t
+    
     return  fwd_tl_sum - bwd_tl_sum
 
 
@@ -138,4 +147,17 @@ def compute_bwd_ctb_loss(fwd_model, bwd_model, log_p0, x, dt,
     log_2 = compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p0, x, dt, t_max, 
                                           num_t_steps, p0_buffer=None)
 
+    return (log_1 - log_2).pow(2).mean()
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+
+def compute_fwd_ctb_loss_reuse_bwd(fwd_model, bwd_model, log_p_1, x_1, dt, 
+                                   t_max, num_t_steps, p1_buffer = None):
+    log_1, x_0 = compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p_1, x_1, dt, 
+                                               t_max, num_t_steps, p0_buffer=None,
+                                               return_x=True, learn_bwd=False)
+    log_2 = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, x_0, dt, t_max, 
+                                          num_t_steps, p1_buffer=p1_buffer)
     return (log_1 - log_2).pow(2).mean()

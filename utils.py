@@ -5,8 +5,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-
-
 class EMALoss:
     def __init__(self, alpha=0.1):
         self.ema = []
@@ -42,12 +40,16 @@ class VarCriterion:
         return np.var(self.loss[-self.measure_size:]) > self.threshold
     
 
-def plot_trajectory(trajectory, timesteps, indices: None | list = None):
+def plot_trajectory(trajectory, timesteps, indices: None | list = None, 
+                    title: str | None = None):
     if indices is not None:
         trajectory = [trajectory[i] for i in indices]
         timesteps = [timesteps[i] for i in indices]
 
     figure, axes  = plt.subplots(1, len(trajectory), figsize=(4 * len(trajectory), 4))
+    if title is not None:
+        figure.suptitle(title)
+    
     for i, sample in enumerate(trajectory):
         if type(timesteps[i]) == str:
             title = f'{timesteps[i]}' 
@@ -59,6 +61,7 @@ def plot_trajectory(trajectory, timesteps, indices: None | list = None):
                         c='r' if type(timesteps[i]) == str else 'b')
         axes[i].set_xlim(-1.5, 1.5)
         axes[i].set_ylim(-1.5, 1.5)
+    
     return figure
 
 def plot_graph(graph):
@@ -85,3 +88,22 @@ def build_config(init_func):
         init_func(self, *args, **kwargs)
 
     return wrapper
+
+
+class Registry:
+    def __init__(self):
+        self._regirstry = {}
+
+    def add(self, cls=None, name=None):
+        def _decorator(func):
+            self._regirstry[cls or cls.__name__] = cls
+            return func
+        
+        return _decorator if cls is None else _decorator(cls) 
+    
+    def __getitem__(self, name):
+        return self._regirstry[name]
+    
+    @property
+    def available(self):
+        return list(self._regirstry)

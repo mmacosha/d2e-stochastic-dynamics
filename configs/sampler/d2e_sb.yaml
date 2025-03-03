@@ -1,16 +1,26 @@
+name: d2e
+
+# training parameters:
+backward_first: true
+fwd_optim_lr: 8e-4
+bwd_optim_lr: 8e-4
+save_checkpoint_freq: 5
+
+threshold: 5e-6
+n_sb_iter: 5
+num_fwd_steps: 6000
+num_bwd_steps: 6000
+
 # process parameters:
 alpha: 4.0
-gamma: 0.0006
+dt: 0.0006
 t_max: 0.0012
-n_sampling_steps: 20
+n_steps: 20
 
-# sb parameters
-num_sb_steps: 20
-threshold: 5e-6
-max_num_iters_per_step: 6000
+batch_size: 512
 
-# learning parameters
-batch_size: 256
-lr_forward: 8e-4
-lr_backward: 8e-4
-save_checkpoint_freq: 5
+reuse_backward_trajectory:  true
+buffer_type: langevin
+buffer_size: 1024
+langevin_step_size: 0.001
+num_langevin_update_steps: 10

@@ -1,30 +1,36 @@
 import hydra
 import omegaconf
 
-from samplers import SBTrainer, SBConfig
-from datasets_2d import DatasetSampler
+from samplers import SBConfig, D2DSB, D2ESB, D2ESBConfig
 from model import SimpleNet
+
+from data import datasets
 
 
 @hydra.main(version_base=None, config_path="./configs",  config_name="config")
 def run(config: omegaconf.DictConfig):
-    sampler = DatasetSampler(
-        p_0=config.data.p_0.name, p_0_args=config.data.p_0.args,
-        p_1=config.data.p_1.name, p_1_args=config.data.p_1.args
-    )
+    p0 = datasets[config.data.p_0.name](**config.data.p_0.args)
+    p1 = datasets[config.data.p_1.name](**config.data.p_1.args)
+
     fwd_model = SimpleNet(**config.models.fwd)
     bwd_model = SimpleNet(**config.models.bwd)
 
-    sb_config = SBConfig(**config.sampler)
+    if  config.sampler.name == 'd2d':
+        sb_config = SBConfig(**config.sampler)
+        sb_trainer_cls = D2DSB
+    elif config.sampler.name == 'd2e':
+        sb_config = D2ESBConfig(**config.sampler)
+        sb_trainer_cls = D2ESB
+    else: 
+        raise NotImplementedError('this trainer is not available')
 
-    sb_trainer = SBTrainer(
-        F=fwd_model,
-        B=bwd_model,
-        sampler=sampler,
+    sb_trainer = sb_trainer_cls(
+        fwd_model=fwd_model,
+        bwd_model=bwd_model,
+        p0=p0, p1=p1,
         config=sb_config,
-        wandb_config=config.exp,
     )
-    sb_trainer.train()
+    sb_trainer.train(config.exp)
 
 
 if __name__ == "__main__":
