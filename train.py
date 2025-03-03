@@ -12,8 +12,8 @@ def run(config: omegaconf.DictConfig):
     p0 = datasets[config.data.p_0.name](**config.data.p_0.args)
     p1 = datasets[config.data.p_1.name](**config.data.p_1.args)
 
-    fwd_model = SimpleNet(**config.models.fwd)
-    bwd_model = SimpleNet(**config.models.bwd)
+    fwd_model = SimpleNet(**config.models.fwd).to(config.sampler.device)
+    bwd_model = SimpleNet(**config.models.bwd).to(config.sampler.device)
 
     if  config.sampler.name == 'd2d':
         sb_config = SBConfig(**config.sampler)

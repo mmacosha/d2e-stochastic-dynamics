@@ -1,4 +1,5 @@
 name: d2e
+device: cpu
 
 # training parameters:
 backward_first: true

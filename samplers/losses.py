@@ -15,7 +15,7 @@ def compute_fwd_tlm_loss(fwd_model, bwd_model, x_1, dt,
     traj_loss = 0
 
     for t_step in torch.linspace(dt, t_max, n_steps).flip(-1):
-        t = torch.ones(512) * t_step
+        t = torch.ones(512, device=x_t_m_dt.device) * t_step
         
         with torch.no_grad():
             bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, x_t, t, dt)
@@ -40,7 +40,7 @@ def compute_bwd_tlm_loss(fwd_model, bwd_model, x_0, dt,
     traj_loss = 0
 
     for t_step in torch.linspace(dt, t_max, n_steps):
-        t = torch.ones(512) * t_step
+        t = torch.ones(512, device=x_t_m_dt.device) * t_step
         
         with torch.no_grad():
             bwd_mean, bwd_log_var = utils.get_mean_log_var(fwd_model, x_t_m_dt, 

@@ -20,7 +20,7 @@ class D2DSB(base_class.SB):
                                desc=f"It {sb_iter} | Forward"):
             self.fwd_optim.zero_grad(set_to_none=True)
 
-            x_1 = self.p1.sample(self.config.batch_size)
+            x_1 = self.p1.sample(self.config.batch_size).to(self.config.device)
             loss = losses.compute_fwd_tlm_loss(self.fwd_model, self.bwd_model, x_1, 
                                                dt, t_max, n_steps, backward=True)
 
@@ -41,7 +41,7 @@ class D2DSB(base_class.SB):
                                 desc=f"It {sb_iter} | Backward"):
             self.bwd_optim.zero_grad(set_to_none=True)
             
-            x_0 = self.p0.sample(self.config.batch_size)
+            x_0 = self.p0.sample(self.config.batch_size).to(self.config.device)
             loss = losses.compute_bwd_tlm_loss(self.fwd_model, self.bwd_model, x_0, 
                                                dt, t_max, n_steps, backward=True)
             
@@ -59,7 +59,7 @@ class D2DSB(base_class.SB):
         t_max = self.config.t_max
         n_steps = self.config.n_steps
         
-        x_0 = self.p0.sample(self.config.batch_size)
+        x_0 = self.p0.sample(self.config.batch_size).to(self.config.device)
         trajectory, timesteps = sutils.sample_trajectory(self.fwd_model, x_0, "forward", 
                                                         dt, n_steps, t_max, 
                                                         return_timesteps=True)
@@ -76,7 +76,7 @@ class D2DSB(base_class.SB):
         t_max = self.config.t_max
         n_steps = self.config.n_steps
 
-        x_1 = self.p1.sample(self.config.batch_size)
+        x_1 = self.p1.sample(self.config.batch_size).to(self.config.device)
         trajectory, timesteps = sutils.sample_trajectory(self.bwd_model, x_1, "backward", 
                                                          dt, n_steps, t_max, 
                                                          return_timesteps=True)

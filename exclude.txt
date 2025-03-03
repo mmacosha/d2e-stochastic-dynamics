@@ -1,0 +1,18 @@
+# Git
+.git/
+.gitignore
+
+
+# System and IDE files
+.DS_Store
+.idea/
+.vscode/
+**/.ipynb_checkpoints/
+**/__pycache__
+
+# exp tracking
+wandb/
+outputs/
+
+# folders with images and data
+figures/

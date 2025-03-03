@@ -14,6 +14,7 @@ from samplers.utils import ReferenceProcess2
 @dataclass
 class SBConfig:
     name: str | None = None 
+    device: str = "cpu"
     backward_first: bool = False
     n_sb_iter: int = 10
     num_fwd_steps: int = 6000
