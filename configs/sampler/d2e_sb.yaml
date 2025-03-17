@@ -1,5 +1,5 @@
 name: d2e
-device: cpu
+device: cuda
 
 # training parameters:
 backward_first: true
@@ -8,9 +8,11 @@ bwd_optim_lr: 8e-4
 save_checkpoint_freq: 5
 
 threshold: 5e-6
-n_sb_iter: 5
-num_fwd_steps: 6000
-num_bwd_steps: 6000
+n_sb_iter: 10000
+num_fwd_steps: 1
+num_bwd_steps: 1
+log_fwd_freq: 100
+log_bwd_freq: 100
 
 # process parameters:
 alpha: 4.0
@@ -19,9 +21,13 @@ t_max: 0.0012
 n_steps: 20
 
 batch_size: 512
+drift_reg_coeff: 0.01
 
-reuse_backward_trajectory:  true
-buffer_type: langevin
+n_trajectories: 2
+drift_reg_coeff: 0.0
+reuse_backward_trajectory: false
+
+buffer_type: simple
 buffer_size: 1024
 langevin_step_size: 0.001
-num_langevin_update_steps: 10
+num_langevin_update_steps: 50

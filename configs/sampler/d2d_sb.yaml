@@ -1,21 +1,24 @@
-name: d2e
-device: cpu
+name: d2d
+device: cuda
 
 # training parameters:
 backward_first: false
-fwd_optim_lr: 1e-3
-bwd_optim_lr: 1e-3
+fwd_optim_lr: 5e-4
+bwd_optim_lr: 5e-4
 save_checkpoint_freq: 5
 
 threshold: 5e-6
-n_sb_iter: 3
-num_fwd_steps: 6000
-num_bwd_steps: 6000
+n_sb_iter: 10000
+num_fwd_steps: 10
+num_bwd_steps: 10
+
+log_fwd_freq: 100
+log_bwd_freq: 100
 
 # process parameters:
 alpha: 4.0
 dt: 0.0006
-t_max: 0.0012
+t_max: 0.012
 n_steps: 20
 
 batch_size: 512

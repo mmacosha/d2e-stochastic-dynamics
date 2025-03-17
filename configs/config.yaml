@@ -3,6 +3,8 @@ defaults:
   - sampler: d2d_sb
 
 exp:
+  id: null
+  resume: allow
   name: sb-experiment
   project: sb
   mode: online
@@ -18,15 +20,24 @@ data:
     args: 
       means: [[-0.7, 0.7],[-0.7, -0.7],[0.7, 0.7],[0.7, -0.7]]
       sigmas: [[0.1, 0.1],[0.1, 0.1],[0.1, 0.1],[0.1, 0.1]]
+      device: ${sampler.device}
 
 models:
   fwd:
     t_emb_size: 64
     x_emb_size: 64
-    n_main_body_layers: 3
+    n_main_body_layers: 2
     predict_log_var: true
   bwd:
     t_emb_size: 64
     x_emb_size: 64
-    n_main_body_layers: 3
+    n_main_body_layers: 2
     predict_log_var: true
+
+hydra:
+  run:
+    dir: "/workspace/writeable"
+  output_subdir: null
+  job_logging:
+    disable_existing_loggers: true
+  verbose: false
