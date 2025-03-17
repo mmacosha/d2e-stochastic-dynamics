@@ -10,11 +10,11 @@ registry = base.DatasetRegistry()
 
 @registry.add(name="mix_of_gaussians")
 class MixOfGaussians(base.Dataset):
-    def __init__(self, means, sigmas):
-        means = torch.as_tensor(means)
-        sigmas = torch.as_tensor(sigmas)
+    def __init__(self, means, sigmas, device: str = 'cpu'):
+        means = torch.as_tensor(means, device=device)
+        sigmas = torch.as_tensor(sigmas, device=device)
 
-        mix = distributions.Categorical(torch.ones(means.size(0), device=means.device))
+        mix = distributions.Categorical(torch.ones(means.size(0), device=device))
         comp = distributions.Independent(distributions.Normal(means, sigmas), 1)
         self.gmm = distributions.MixtureSameFamily(mix, comp)
 

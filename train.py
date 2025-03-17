@@ -1,3 +1,5 @@
+import os
+
 import hydra
 import omegaconf
 
@@ -23,7 +25,7 @@ def run(config: omegaconf.DictConfig):
         sb_trainer_cls = D2ESB
     else: 
         raise NotImplementedError('this trainer is not available')
-
+    
     sb_trainer = sb_trainer_cls(
         fwd_model=fwd_model,
         bwd_model=bwd_model,

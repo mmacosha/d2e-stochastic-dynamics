@@ -17,12 +17,13 @@ from . import base_class
 
 @dataclass
 class D2ESBConfig(base_class.SBConfig):
+    drift_reg_coeff: float = 0.0
     reuse_backward_trajectory: bool = True
+    n_trajectories: int = 2
     buffer_type: str = 'simple'
     buffer_size: int = 1024
     langevin_step_size: float = 0.001
     num_langevin_update_steps: int = 10
-
 
 
 class D2ESB(base_class.SB):
@@ -44,11 +45,11 @@ class D2ESB(base_class.SB):
         t_max = self.config.t_max
         n_steps = self.config.n_steps
 
-        for step_iter in trange(self.config.num_fwd_steps, leave=False, 
+        for step_iter in trange(self.config.num_bwd_steps, leave=False, 
                                 desc=f'It {sb_iter} | Backward'):
             self.bwd_optim.zero_grad(set_to_none=True)
 
-            x_0 = self.p0.sample(512)
+            x_0 = self.p0.sample(self.config.batch_size).to(self.config.device)
             fwd_model = self.reference_process if sb_iter == 0 else self.fwd_model
             loss = losses.compute_bwd_tlm_loss(fwd_model, self.bwd_model, 
                                                x_0, dt, t_max, n_steps)
@@ -64,20 +65,30 @@ class D2ESB(base_class.SB):
         dt = self.config.dt
         t_max = self.config.t_max
         n_steps = self.config.n_steps
+
+        device = self.config.device
+        batch_size = self.config.batch_size
+        n_trajectories = self.config.n_trajectories
+
+        drift_reg_coeff = self.config.drift_reg_coeff
                 
-        for step_iter in trange(self.config.num_bwd_steps, 
+        for step_iter in trange(self.config.num_fwd_steps, 
                                 leave=False, desc=f'It {sb_iter} | Forward'):
             self.fwd_optim.zero_grad(set_to_none=True)
 
             if sb_iter == 0:
-                x_0 = self.p0.sample(self.config.batch_size)
-                loss = losses.compute_fwd_ctb_loss(self.fwd_model, self.bwd_model, 
-                                                    self.p1.log_density, x_0, dt, 
-                                                    t_max, n_steps, 
-                                                    p1_buffer=self.p1_buffer)
+                x_0 = self.p0.sample(batch_size // n_trajectories).to(device)
+                x_0 = x_0.repeat(n_trajectories, 1)
+                loss = losses.compute_fwd_vargrad_loss(self.fwd_model, self.bwd_model, 
+                                                       self.p1.log_density, x_0, dt, 
+                                                       t_max, n_steps, 
+                                                       p1_buffer=self.p1_buffer,
+                                                       n_trajectories=n_trajectories,
+                                                       reg_coeff=drift_reg_coeff)
 
             elif self.config.reuse_backward_trajectory:
-                x_1 = self.p1_buffer.sample(self.config.batch_size)
+                raise ValueError('This part of code is under rewriting. DO NOT USE!')
+                x_1 = self.p1_buffer.sample(batch_size).to(device)
                 loss = losses.compute_fwd_ctb_loss_reuse_bwd(
                                                         self.fwd_model, self.bwd_model,
                                                         self.p1.log_density, x_1, dt, 
@@ -85,14 +96,17 @@ class D2ESB(base_class.SB):
                                                     )
 
             else:
-                x_1 = self.p1_buffer.sample(self.config.batch_size)
-                x_0 = sutils.sample_trajectory(self.bwd_model, x_1,"backward", dt, 
-                                               n_steps, t_max, only_last=True)
-                loss = losses.compute_fwd_ctb_loss(self.fwd_model, self.bwd_model, 
-                                                    self.p1.log_density, x_0, dt, 
-                                                    t_max, n_steps, 
-                                                    p1_buffer=self.p1_buffer)
-
+                x_1 = self.p1_buffer.sample(batch_size // n_trajectories).to(device)
+                x_0 = sutils.sample_trajectory(self.bwd_model, x_1,"backward", 
+                                               dt, n_steps, t_max, only_last=True)
+                x_0 = x_0.repeat(n_trajectories, 1)
+                loss = losses.compute_fwd_vargrad_loss(self.fwd_model, self.bwd_model, 
+                                                       self.p1.log_density, x_0, dt, 
+                                                       t_max, n_steps, 
+                                                       p1_buffer=self.p1_buffer,
+                                                       n_trajectories=n_trajectories,
+                                                       reg_coeff=drift_reg_coeff)
+            
             loss.backward()
             self.fwd_optim.step()
 
@@ -108,24 +122,34 @@ class D2ESB(base_class.SB):
         t_max = self.config.t_max
         n_steps = self.config.n_steps
 
-        x_0 = self.p0.sample(512)
+        x_0 = self.p0.sample(self.config.batch_size).to(self.config.device)
         trajectory, timesteps = sutils.sample_trajectory(self.fwd_model, x_0, "forward", 
                                                         dt, n_steps, t_max, 
                                                         return_timesteps=True)
+
+        trajectory = [tensor.cpu() for tensor in trajectory]
         figure = utils.plot_trajectory(trajectory, timesteps, 
                                        title=f"Forward Process, step={sb_iter}")
-         
-        x_0 = self.p0.sample(128)
+
+        x_0 = self.p0.sample(self.config.batch_size // 4).to(self.config.device)
         elbo, iw_1, iw_2 = metrics.compute_elbo(self.fwd_model, self.bwd_model, 
                                                 self.p1.log_density, x_0, dt, t_max, 
                                                 n_steps, n_traj=16)
 
+        x_0 = self.p0.sample(self.config.batch_size // 4).to(self.config.device)
+        x_1_sampled = sutils.sample_trajectory(self.fwd_model, x_0, 'forward', 
+                                               dt, n_steps, t_max, only_last=True)
+
+        x_1_true = self.p1.sample(self.config.batch_size // 4)
+        w2_dist = metrics.compute_w2_distance(x_1_true, x_1_sampled)
+
         run.log({
             "images/forward_trajectory": wandb.Image(figure), "sb_iter": sb_iter,
             "metrics/p1_elbo": elbo, "metrics/p1_iw_1": iw_1, "metrics/p1_iw_2": iw_2,
+            "metrics/w2_dist": w2_dist,
         })
         plt.close(figure)
-    
+
     @torch.no_grad()
     def log_backward_step(self, sb_iter, run):
         dt = self.config.dt
@@ -133,16 +157,19 @@ class D2ESB(base_class.SB):
         n_steps = self.config.n_steps
         
         if sb_iter == 0:
-            x_0  = self.p0.sample(512)
-            x_1 = sutils.sample_trajectory(self.reference_process, x_0, "forward", dt, 
-                                          n_steps, t_max, only_last=True)
+            x_0  = self.p0.sample(512).to(self.config.device)
+            x_1 = sutils.sample_trajectory(self.reference_process, x_0, "forward", 
+                                           dt, n_steps, t_max, only_last=True)
         else:
-            x_1 = self.p1_buffer.sample(512)
+            x_1 = self.p1_buffer.sample(512).to(self.config.device)
         
         trajectory, timesteps = sutils.sample_trajectory(self.bwd_model, x_1, "backward", 
                                                         dt, n_steps, t_max, 
                                                         return_timesteps=True)
+        
+        trajectory = [tensor.cpu() for tensor in trajectory]
         figure = utils.plot_trajectory(trajectory[::-1], timesteps[::-1], 
                                        title=f"Backward Process, step={sb_iter}")
+        
         run.log({"images/backward_trajectory": wandb.Image(figure), "sb_iter": sb_iter})
         plt.close(figure)

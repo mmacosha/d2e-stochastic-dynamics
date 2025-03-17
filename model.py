@@ -43,8 +43,8 @@ class SimpleNet(nn.Module):
             self, 
             t_emb_size: int, 
             x_emb_size: int, 
-            n_main_body_layers: int = 3,
-            predict_log_var: bool = False
+            n_main_body_layers: int = 2,
+            predict_log_var: bool = False,
         ):
         super().__init__()
         self.t_emb_size = t_emb_size
@@ -54,8 +54,8 @@ class SimpleNet(nn.Module):
 
         self.x_embed = nn.Sequential(
             nn.Linear(2, x_emb_size),
-            nn.ReLU(),
-            nn.Linear(x_emb_size, x_emb_size)
+            # nn.ReLU(),
+            # nn.Linear(x_emb_size, x_emb_size)
         )
         
         combined_hidden_size = x_emb_size
@@ -63,15 +63,17 @@ class SimpleNet(nn.Module):
         if self.use_t:
             self.t_embed = nn.Sequential(
                 nn.Linear(t_emb_size, x_emb_size),
-                nn.ReLU(),
+                nn.ELU(),
                 nn.Linear(x_emb_size, x_emb_size)
             )
             combined_hidden_size += x_emb_size
 
         layers = []
         for i in range(n_main_body_layers):
-            layers.append(nn.Linear(combined_hidden_size if i == 0 else x_emb_size, x_emb_size))
-            layers.append(nn.ReLU())
+            layers.append(
+                nn.Linear(combined_hidden_size if i == 0 else x_emb_size, x_emb_size)
+            )
+            layers.append(nn.ELU())
         self.main_body = nn.Sequential(*layers)
         
         self.drift_head = nn.Linear(x_emb_size, 2)

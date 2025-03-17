@@ -16,7 +16,7 @@ class D2DSB(base_class.SB):
         t_max = self.config.t_max
         n_steps = self.config.n_steps
 
-        for step_iter in range(self.config.num_fwd_steps, leave=False, 
+        for step_iter in trange(self.config.num_fwd_steps, leave=False, 
                                desc=f"It {sb_iter} | Forward"):
             self.fwd_optim.zero_grad(set_to_none=True)
 
@@ -25,14 +25,14 @@ class D2DSB(base_class.SB):
                                                dt, t_max, n_steps, backward=True)
 
             run.log({
-                "forward_loss": loss,
-                "fwd_step": sb_iter * self.config.num_per_step_ites + step_iter
+                "train/forward_loss": loss / n_steps,
+                "fwd_step": sb_iter * self.config.num_fwd_steps + step_iter
             })
 
             self.fwd_ema_loss.update(loss.item() / n_steps)
             self.fwd_optim.step()
 
-    def train_backward(self, sb_iter, run):
+    def train_backward_step(self, sb_iter, run):
         dt = self.config.dt
         t_max = self.config.t_max
         n_steps = self.config.n_steps
@@ -46,8 +46,8 @@ class D2DSB(base_class.SB):
                                                dt, t_max, n_steps, backward=True)
             
             run.log({
-                "backward_loss": loss,
-                "bwd_step": sb_iter * self.config.num_per_step_ites + step_iter
+                "train/backward_loss": loss / n_steps,
+                "bwd_step": sb_iter * self.config.num_bwd_steps + step_iter
             })
 
             self.bwd_ema_loss.update(loss.item() / n_steps)
@@ -63,15 +63,18 @@ class D2DSB(base_class.SB):
         trajectory, timesteps = sutils.sample_trajectory(self.fwd_model, x_0, "forward", 
                                                         dt, n_steps, t_max, 
                                                         return_timesteps=True)
-
+        trajectory = [tensor.cpu() for tensor in trajectory]
         figure = utils.plot_trajectory(trajectory, timesteps, 
                                        title=f"Forward Process, step={sb_iter}")
 
-        run.log({'forward trajectory': wandb.Image(figure)})
+        run.log({
+            "images/forward_trajectory": wandb.Image(figure), 
+            "sb_iter": sb_iter
+        })
         plt.close(figure)
 
     @torch.no_grad()
-    def sampler_forward(self, sb_iter, run):
+    def log_backward_step(self, sb_iter, run):
         dt = self.config.dt
         t_max = self.config.t_max
         n_steps = self.config.n_steps
@@ -80,8 +83,11 @@ class D2DSB(base_class.SB):
         trajectory, timesteps = sutils.sample_trajectory(self.bwd_model, x_1, "backward", 
                                                          dt, n_steps, t_max, 
                                                          return_timesteps=True)
-        
+        trajectory = [tensor.cpu() for tensor in trajectory]
         figure = utils.plot_trajectory(trajectory[::-1], timesteps[::-1], 
                                        title=f"Backward Process, step={sb_iter}")
-        run.log({"backward trajectory": wandb.Image(figure)})
+        run.log({
+            "images/backward_trajectory": wandb.Image(figure), 
+            "sb_iter": sb_iter
+        })
         plt.close(figure)
