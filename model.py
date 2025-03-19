@@ -97,3 +97,69 @@ class SimpleNet(nn.Module):
             return ModelOutput(drift=drift, log_var=log_var)
 
         return ModelOutput(drift=drift)
+
+
+class ResBlock(nn.Module):
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size),
+            nn.LayerNorm(hidden_size), nn.ELU(),
+            nn.Linear(hidden_size, hidden_size)
+        )
+    
+    def forward(self, x):
+        return x + self.net(x)
+
+
+class SimpleNet2(nn.Module):
+    def __init__(
+            self, 
+            t_emb_size: int, 
+            x_emb_size: int, 
+            n_main_body_layers: int = 2,
+            predict_log_var: bool = False,
+        ):
+        super().__init__()
+        self.t_emb_size = t_emb_size
+        self.x_emb_size = x_emb_size
+        self.use_t = t_emb_size > 0
+        self.predict_log_var = predict_log_var
+
+        self.x_embed = nn.Sequential(
+            nn.Linear(2, x_emb_size),
+        )
+        
+        combined_hidden_size = x_emb_size
+        
+        if self.use_t:
+            self.t_embed = nn.Sequential(
+                nn.Linear(t_emb_size, x_emb_size),
+            )
+            combined_hidden_size += x_emb_size
+
+        layers = [nn.Linear(combined_hidden_size, x_emb_size)]
+        for i in range(n_main_body_layers):
+            layers.append(ResBlock(x_emb_size))
+        self.main_body = nn.Sequential(*layers)
+        
+        self.drift_head = nn.Linear(x_emb_size, 2)
+        if self.predict_log_var:
+            self.log_var_head = nn.Linear(x_emb_size, 2)
+
+    def forward(self, x, t):
+        embeddings = self.x_embed(x)
+
+        if self.use_t:
+            t_embed = fourier_proj(t, self.t_emb_size)
+            t_embed = self.t_embed(t_embed)
+            embeddings = torch.cat([embeddings, t_embed], dim=-1)
+        
+        embeddings = self.main_body(embeddings)
+        drift = self.drift_head(embeddings)
+
+        if self.predict_log_var:
+            log_var = self.log_var_head(embeddings)
+            return ModelOutput(drift=drift, log_var=log_var)
+
+        return ModelOutput(drift=drift)

@@ -90,6 +90,7 @@ def compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, x, dt, t_max,
             bwd_tl_sum = bwd_tl_sum + log_normal_density(x_t_m_dt, bwd_mean, bwd_log_var)
 
         x_t_m_dt = x_t
+
     bwd_tl_sum = bwd_tl_sum + log_p_1(x_t_m_dt)
 
     if p1_buffer is not None:
@@ -138,17 +139,6 @@ def compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p, x, dt, t_max,
     return  fwd_tl_sum - bwd_tl_sum
 
 
-def compute_fwd_ctb_loss(fwd_model, bwd_model, log_p_1, x, dt, 
-                         t_max, num_t_steps, p1_buffer = None):
-    log_1 = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, x, dt, t_max, 
-                                          num_t_steps, p1_buffer=p1_buffer)
-
-    log_2 = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, x, dt, t_max, 
-                                          num_t_steps, p1_buffer=None)
-
-    return (log_1 - log_2).pow(2).mean()
-
-
 def compute_fwd_vargrad_loss(fwd_model, bwd_model, log_p_1, x, dt, t_max, 
                              num_t_steps,p1_buffer = None, n_trajectories: int = 2, 
                              reg_coeff: float = 0.0):
@@ -162,6 +152,15 @@ def compute_fwd_vargrad_loss(fwd_model, bwd_model, log_p_1, x, dt, t_max,
         loss = loss + reg
     return loss
 
+def compute_bwd_vargrad_loss(fwd_model, bwd_model, log_p_0, x, dt, t_max,
+                             num_t_steps, p0_buffer = None, n_trajectories: int = 2):
+    log = compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p_0, x, dt, t_max,
+                                        num_t_steps, p0_buffer=p0_buffer)
+    log = log.reshape(n_trajectories, -1)
+    return (log  - log.mean(0, keepdim=True).detach()).pow(2).mean()
+
+
+################################ LEGACY LOSS FUNCTIONS #################################
 
 def compute_bwd_ctb_loss(fwd_model, bwd_model, log_p0, x, dt, 
                          t_max, num_t_steps, p0_buffer = None):
@@ -174,7 +173,15 @@ def compute_bwd_ctb_loss(fwd_model, bwd_model, log_p0, x, dt,
     return (log_1 - log_2).pow(2).mean()
 
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+def compute_fwd_ctb_loss(fwd_model, bwd_model, log_p_1, x, dt, 
+                         t_max, num_t_steps, p1_buffer = None):
+    log_1 = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, x, dt, t_max, 
+                                          num_t_steps, p1_buffer=p1_buffer)
+
+    log_2 = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, x, dt, t_max, 
+                                          num_t_steps, p1_buffer=None)
+
+    return (log_1 - log_2).pow(2).mean()
 
 
 def compute_fwd_ctb_loss_reuse_bwd(fwd_model, bwd_model, log_p_1, x_1, dt, 
