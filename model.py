@@ -41,30 +41,30 @@ class ModelOutput(collections.UserDict):
 class SimpleNet(nn.Module):
     def __init__(
             self, 
-            t_emb_size: int, 
             x_emb_size: int, 
+            in_dim: int = 2,
+            t_emb_size: int | None = None ,
             n_main_body_layers: int = 2,
             predict_log_var: bool = False,
         ):
         super().__init__()
-        self.t_emb_size = t_emb_size
         self.x_emb_size = x_emb_size
-        self.use_t = t_emb_size > 0
+        self.t_emb_size = t_emb_size
         self.predict_log_var = predict_log_var
 
         self.x_embed = nn.Sequential(
-            nn.Linear(2, x_emb_size),
-            # nn.ReLU(),
+            nn.Linear(in_dim, x_emb_size),
+            nn.ELU(),
             # nn.Linear(x_emb_size, x_emb_size)
         )
         
         combined_hidden_size = x_emb_size
         
-        if self.use_t:
+        if self.t_emb_size is not None:
             self.t_embed = nn.Sequential(
                 nn.Linear(t_emb_size, x_emb_size),
                 nn.ELU(),
-                nn.Linear(x_emb_size, x_emb_size)
+                # nn.Linear(x_emb_size, x_emb_size)
             )
             combined_hidden_size += x_emb_size
 
@@ -82,12 +82,16 @@ class SimpleNet(nn.Module):
             self.log_var_head = nn.Linear(x_emb_size, 2)
 
     def forward(self, x, t):
+        if self.t_emb_size is None:
+            x = torch.cat([x, t.view(-1, 1)], dim=1)
+
         embeddings = self.x_embed(x)
 
-        if self.use_t:
+        if self.t_emb_size is not None:
             t_embed = fourier_proj(t, self.t_emb_size)
             t_embed = self.t_embed(t_embed)
             embeddings = torch.cat([embeddings, t_embed], dim=-1)
+        
         
         embeddings = self.main_body(embeddings)
         drift = self.drift_head(embeddings)
@@ -99,17 +103,26 @@ class SimpleNet(nn.Module):
         return ModelOutput(drift=drift)
 
 
-class ResBlock(nn.Module):
-    def __init__(self, hidden_size):
+
+class Block(nn.Module):
+    def __init__(self, dim, use_ln: bool = False):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size),
-            nn.LayerNorm(hidden_size), nn.ELU(),
-            nn.Linear(hidden_size, hidden_size)
+        self.block = nn.Sequential(
+            nn.Linear(dim, dim), 
+            nn.LayerNorm(dim) if use_ln else nn.Identity(), 
+            nn.ELU()
         )
     
     def forward(self, x):
-        return x + self.net(x)
+        return self.block(x)
+
+class ResBlock(nn.Module):
+    def __init__(self, dim, use_ln: bool = False):
+        super().__init__()
+        self.block = Block(dim, use_ln)
+    
+    def forward(self, x):
+        return x + self.block(x)
 
 
 class SimpleNet2(nn.Module):
@@ -163,3 +176,28 @@ class SimpleNet2(nn.Module):
             return ModelOutput(drift=drift, log_var=log_var)
 
         return ModelOutput(drift=drift)
+
+
+class Energy(nn.Module):
+    def __init__(self, in_dim=2, out_dim=1, 
+                 hidden_dim=64, n_blocks=3, 
+                 use_ln: bool = False, block_type='simple'):
+        super().__init__()
+
+        self.proj_in = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim), nn.ELU()
+        )
+        block = Block if block_type == 'simple' else ResBlock
+        self.proj_out = nn.Linear(hidden_dim, out_dim)
+        
+        self.body = nn.Sequential(
+            *[block(hidden_dim, use_ln) for _ in range(n_blocks)]
+        )
+
+    def forward(self, x):
+        x = self.proj_in(x)
+        x = self.body(x)
+        out = self.proj_out(x)
+
+        
+        return out.squeeze(1)

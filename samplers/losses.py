@@ -3,6 +3,14 @@ import torch
 from samplers import utils
 
 
+def ebm_loss(energy_model, positive_samples, negative_samples, alpha=1.0):
+    positive_energy = energy_model(positive_samples).mean()
+    negative_energy = energy_model(negative_samples).mean()
+    
+    regularization = alpha * (positive_energy**2 + negative_energy**2)
+    return positive_energy - negative_energy + regularization
+
+
 def log_normal_density(x, mean, log_var):
     """Compute log dencity normal distribution."""
     return - 0.5 * (log_var + torch.exp(- log_var) * (mean - x).pow(2)).sum(-1)
@@ -40,16 +48,19 @@ def compute_bwd_tlm_loss(fwd_model, bwd_model, x_0, dt, t_max, n_steps,
     traj_loss = 0
 
     for t_step in torch.linspace(dt, t_max, n_steps):
-        t = torch.ones(512, device=x_t_m_dt.device) * t_step
+        t = torch.ones(x_t_m_dt.size(0), device=x_t_m_dt.device) * t_step
         
         with torch.no_grad():
-            bwd_mean, bwd_log_var = utils.get_mean_log_var(fwd_model, x_t_m_dt, 
-                                                           t - dt, dt)
+            bwd_mean, bwd_log_var = utils.get_mean_log_var(
+                fwd_model, x_t_m_dt, t - dt, dt
+            )
             x_t = bwd_mean + torch.randn_like(bwd_mean) * bwd_log_var.exp().sqrt()
         
         bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, x_t, t, dt)
+        loss = log_normal_density(x_t_m_dt, bwd_mean, bwd_log_var)
         
-        loss = log_normal_density(x_t_m_dt, bwd_mean, bwd_log_var)                        
+        assert ~loss.isnan().any(), f"Loss is NaN on {t_step=}"
+       
         if reg_coeff > 0:
             loss = (-loss).mean() + reg_coeff * bwd_mean.pow(2).sum(-1).mean()
         else:
@@ -81,7 +92,6 @@ def compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, x, dt, t_max,
 
         with torch.no_grad():
             x_t = fwd_mean + fwd_log_var.exp().sqrt() * torch.randn_like(fwd_mean)
-
         fwd_tl_sum = fwd_tl_sum + log_normal_density(x_t, fwd_mean, fwd_log_var)
 
         # COMPUTE BACKWARD LOSS
@@ -91,12 +101,9 @@ def compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, x, dt, t_max,
 
         x_t_m_dt = x_t
 
-    bwd_tl_sum = bwd_tl_sum + log_p_1(x_t_m_dt)
-
     if p1_buffer is not None:
         p1_buffer.update(x_t_m_dt, fraction=0.2)
-    
-    return  fwd_tl_sum - bwd_tl_sum, reg
+    return bwd_tl_sum + log_p_1(x_t_m_dt) - fwd_tl_sum, reg
 
 
 def compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p, x, dt, t_max, 
@@ -141,11 +148,15 @@ def compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p, x, dt, t_max,
 
 def compute_fwd_vargrad_loss(fwd_model, bwd_model, log_p_1, x, dt, t_max, 
                              num_t_steps,p1_buffer = None, n_trajectories: int = 2, 
-                             reg_coeff: float = 0.0):
+                             reg_coeff: float = 0.0, clip_loss: bool = False,
+                             clip_range: tuple[float, float] = (-1000.0, 1000.0)):
     log, reg = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, 
                                              x, dt, t_max, num_t_steps, 
                                              p1_buffer=p1_buffer, reg_coeff=reg_coeff)
-    log = log.reshape(n_trajectories, -1) 
+    if clip_loss:
+        log = log.clip(*clip_range)
+
+    log = log.reshape(n_trajectories, -1)
     loss = (log  - log.mean(0, keepdim=True).detach()).pow(2).mean()
     
     if reg != 0.0:

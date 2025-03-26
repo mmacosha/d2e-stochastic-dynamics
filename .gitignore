@@ -9,5 +9,6 @@
 wandb/
 outputs/
 
-# folders with images and data
+# folders with images, data and checkpoints
 figures
+checkpoints

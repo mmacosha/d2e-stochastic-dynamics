@@ -13,7 +13,13 @@ def get_mean_log_var(model, x, t, dt):
     
     if output.contains('log_var'):
         log_var = log_var + output.log_var
+        if log_var.isnan().any():
+            print(log_var)
+            assert 0, "log_var is NaN"
     
+    if output.drift.isnan().any():
+        print(output.drift)
+        assert 0, "drift is NaN"
     mean = x + output.drift * dt
     return mean, log_var
 
