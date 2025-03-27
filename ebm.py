@@ -36,8 +36,8 @@ def set_seed(seed, device):
         torch.cuda.manual_seed_all(seed)
 
 
-def langevin_dynamics(energy, ld_step_size=0.0001, n_steps=3001, log_interval=500):
-    x = torch.randn(512, 2)
+def langevin_dynamics(energy, ld_step_size=0.0001, n_steps=3001, log_interval=500, device="cpu"):
+    x = torch.randn(512, 2).to(device)  # Ensure tensor is on the correct device
     trajectory = [x]
     timesteps = [0]
     for i in range(n_steps):
@@ -54,6 +54,7 @@ def langevin_dynamics(energy, ld_step_size=0.0001, n_steps=3001, log_interval=50
 
 @torch.no_grad()
 def log_trajectory(model, x, direction, config, it, limits=(-5, 5)):
+    x = x.to(config.device)  # Ensure input tensor is on the correct device
     dt = config.dt
     t_max = config.t_max
     n_steps = config.n_steps
@@ -90,23 +91,22 @@ def log_ebm(energy, fwd_model, dataset_sampler, config, it, limits=(-5, 5)):
     axes[0].set_ylim(*limits)
 
     # Energy function plot
-    x = torch.linspace(*limits, 200)
-    y = torch.linspace(*limits, 200)
+    x = torch.linspace(*limits, 200).to(config.device)  # E y = # Ensure tensor is on the correct device torch.linspace(*limits, 200).to(config.device)  # Ensure tensor is on the correct device
     X, Y = torch.meshgrid(x, y, indexing='ij')
-    grid_points = torch.stack([X, Y], axis=-1).reshape(-1, 2).float()
+    grid_points = torch.stack([X, Y], axis=-1).reshape(-1, 2).float().to(config.device)
 
     log_density = - energy(grid_points)
     log_density = log_density - log_density.max() 
 
-    Z = log_density.numpy().reshape(200, 200)
+    Z = log_density.cpu().numpy().reshape(200, 200)  # Move to CPU for plotting
 
-    contour = axes[1].contour(X, Y, Z, levels=7, colors='k')
+    contour = axes[1].contour(X.cpu(), Y.cpu(), Z, levels=7, colors='k')
     axes[1].clabel(contour, inline=True, fontsize=6)
-    axes[1].contourf(X, Y, Z, levels=10, cmap='viridis', alpha=0.5)
+    axes[1].contourf(X.cpu(), Y.cpu(), Z, levels=10, cmap='viridis', alpha=0.5)
     axes[1].set_title('Energy Function')
     axes[1].set_xlim(*limits)
     axes[1].set_ylim(*limits)
-    figure.colorbar(axes[1].contourf(X, Y, Z, levels=10, cmap='viridis', 
+    figure.colorbar(axes[1].contourf(X.cpu(), Y.cpu(), Z, levels=10, cmap='viridis', 
                     alpha=0.5), ax=axes[1], label='Energy Value')
 
     wandb.log({f"- energy": wandb.Image(figure)}, step=it)
@@ -145,12 +145,12 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
         # LOG BACKWARD TRAJECTORY
         if it % train_config.log_interval == 0:
             if p1_buffer.is_empty():
-                x_0 = dataset_sampler.sample(train_config.batch_size)
+                x_0 = dataset_sampler.sample(train_config.batch_size).to(device)
                 x_0 = x_0 + torch.randn_like(x_0) * train_config.noise_std
                 x_1 = sample_trajectory(fwd_model, x_0, "forward", dt, 
                                         n_steps, t_max, only_last=True)
             else:
-                x_1 = p1_buffer.sample(train_config.batch_size)
+                x_1 = p1_buffer.sample(train_config.batch_size).to(device)
 
             log_trajectory(bwd_model, x_1, "backward", train_config, it)
 
@@ -165,7 +165,7 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
                 x_0[:bs//3] = sample_trajectory(
                     bwd_model, x_0[:bs//3], "backward", 
                     dt, n_steps, t_max, only_last=True
-                )
+                ).to(device)
                 if not p1_buffer.is_empty():
                     x_0[-(bs//3):] = p1_buffer.sample(bs//3).to(device)
             
@@ -193,7 +193,7 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
 
         # LOG FORWARD TRAJECTORY
         if it % train_config.log_interval == 0:
-            x_0 = dataset_sampler.sample(train_config.batch_size)
+            x_0 = dataset_sampler.sample(train_config.batch_size).to(device)
             x_0 = x_0 + torch.randn_like(x_0) * train_config.noise_std
             log_trajectory(fwd_model, x_0, "forward", train_config, it)
 
@@ -204,7 +204,7 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
                 x_0 = x_0 + torch.randn_like(x_0) \
                     * train_config.noise_std * max(it / 2500, 1.0)
                 x_1 = sample_trajectory(fwd_model, x_0, "forward", dt, 
-                                        n_steps, t_max, only_last=True)
+                                        n_steps, t_max, only_last=True).to(device)
             
             energy_optim.zero_grad(set_to_none=True)
             loss = losses.ebm_loss(energy, x_0, x_1, 
@@ -232,9 +232,9 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
         # LOG LANDEVIN TRAJECTORY
         if it % 2000 == 0 and it > 0:
             trajectory, timesteps = langevin_dynamics(energy, ld_step_size=0.0001, 
-                                                      n_steps=3001, log_interval=500)
+                                                      n_steps=3001, log_interval=500, device=device)
             
-            trajectory.append(dataset_sampler.sample(512))
+            trajectory.append(dataset_sampler.sample(512).to(device))
             timesteps.append("real samples")
 
             figure = plot_trajectory(trajectory, timesteps, 
@@ -310,7 +310,6 @@ def main(config):
                  fwd_optim, bwd_optim, energy_optim, p1_buffer,
                  fwd_scheduler, bwd_scheduler, energy_scheduler,
                  dataset_sampler, config.train)
-
 
 if __name__ == "__main__":
     main()
