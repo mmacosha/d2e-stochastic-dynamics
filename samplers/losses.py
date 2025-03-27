@@ -3,11 +3,18 @@ import torch
 from samplers import utils
 
 
-def ebm_loss(energy_model, positive_samples, negative_samples, alpha=1.0):
+def ebm_loss(energy_model, positive_samples, negative_samples, alpha=1.0, 
+             reg_type: str = 'l2'):
+    """Compute EBM loss."""
     positive_energy = energy_model(positive_samples).mean()
     negative_energy = energy_model(negative_samples).mean()
     
-    regularization = alpha * (positive_energy**2 + negative_energy**2)
+    if reg_type == 'l2':
+        regularization = alpha * (positive_energy**2 + negative_energy**2)
+    elif reg_type == 'l1':
+        regularization = alpha * (positive_energy.abs() + negative_energy.abs())
+    else:
+        raise ValueError(f"Unknown regularization type: {reg_type}")
     return positive_energy - negative_energy + regularization
 
 

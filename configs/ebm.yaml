@@ -1,0 +1,49 @@
+seed: 3704
+
+energy_model_params:
+  in_dim: 2
+  out_dim: 1
+  hidden_dim: 128
+  n_blocks: 2
+  use_ln: False
+  block_type: simple
+
+fwd_model_params:
+  x_emb_size: 64
+  in_dim: 3
+  t_emb_size: null
+  n_main_body_layers: 1
+  predict_log_var: True
+
+bwd_model_params:
+  x_emb_size: 64
+  in_dim: 3
+  t_emb_size: null
+  n_main_body_layers: 1
+  predict_log_var: True
+
+train:
+  reference_alpha: 0.25
+  dt: 0.006
+  t_max: 0.12
+  n_steps: 20
+  n_trajectories: 2
+
+  fwd_lr: 2e-4
+  bwd_lr: 1e-3
+  energy_lr: 2e-4
+  enegy_ema_decay: 0.999
+
+  lr_schedule_gamma: 0.8
+  lr_schedule_milestones: [2500, 6000, 12000]
+  log_interval: 100
+  noise_std: 0.7
+  batch_size: 512
+
+  p1_buffer_size: 2048
+  num_iters: 20000
+  num_bwd_iters: 1
+  num_fwd_iters: 5
+  num_energy_iters: 1
+
+  device: cpu

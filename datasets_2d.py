@@ -1,6 +1,7 @@
 import math
 import torch
 
+from torch import distributions
 from sklearn import datasets as sk_datasets
 
 
@@ -123,3 +124,23 @@ def checkboard(batch_size, shift=None):
     mask = x_mask ^ y_mask
     samples = samples[mask][:batch_size] + (shift if shift is not None else 0)
     return samples.float()
+
+class GaussMix:
+    def __init__(self, means, sigmas):
+        mix = distributions.Categorical(torch.ones(means.size(0), device=means.device))
+        comp = distributions.Independent(distributions.Normal(means, sigmas), 1)
+        self.gmm = distributions.MixtureSameFamily(mix, comp)
+
+        self._grad = torch.func.grad(lambda y: self.log_prob(y).sum())
+
+    def sample(self, n_samples):
+        return self.gmm.sample((n_samples,))
+
+    def to(self, device='cpu'):
+        self.gmm.to(device)
+
+    def log_prob(self, x):
+        return self.gmm.log_prob(x)
+    
+    def grad(self, x):
+        return self._grad(x)

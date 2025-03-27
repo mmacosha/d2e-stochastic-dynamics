@@ -41,7 +41,7 @@ class VarCriterion:
     
 
 def plot_trajectory(trajectory, timesteps, indices: None | list = None, 
-                    title: str | None = None):
+                    title: str | None = None, limits=(-5, 5)):
     if indices is not None:
         trajectory = [trajectory[i] for i in indices]
         timesteps = [timesteps[i] for i in indices]
@@ -57,10 +57,9 @@ def plot_trajectory(trajectory, timesteps, indices: None | list = None,
             title = f'timestep: {round(timesteps[i], 4)}'
         
         axes[i].set_title(title)
-        axes[i].scatter(sample[:, 0], sample[:, 1], 
-                        c='r' if type(timesteps[i]) == str else 'b')
-        axes[i].set_xlim(-1.5, 1.5)
-        axes[i].set_ylim(-1.5, 1.5)
+        axes[i].scatter(sample[:, 0], sample[:, 1], c='b')
+        axes[i].set_xlim(*limits)
+        axes[i].set_ylim(*limits)
     
     return figure
 

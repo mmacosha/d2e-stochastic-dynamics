@@ -28,7 +28,7 @@ def make_euler_maruyama_step(model, x, t, dt):
     mean, log_var = get_mean_log_var(model, x, t, dt)
     return mean + torch.randn_like(mean) * log_var.exp().sqrt()
 
-
+@torch.no_grad()
 def sample_trajectory(model, x_start, direction, dt, n_steps, t_max, 
                       only_last: bool = False, return_timesteps: bool = False):
     assert direction in {"forward", "backward"}
