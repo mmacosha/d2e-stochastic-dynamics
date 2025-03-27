@@ -36,7 +36,8 @@ def set_seed(seed, device):
         torch.cuda.manual_seed_all(seed)
 
 
-def langevin_dynamics(energy, ld_step_size=0.0001, n_steps=3001, log_interval=500, device="cpu"):
+def langevin_dynamics(energy, ld_step_size=0.0001, n_steps=3001, 
+                      log_interval=500, device="cpu"):
     x = torch.randn(512, 2).to(device)  # Ensure tensor is on the correct device
     trajectory = [x]
     timesteps = [0]
@@ -67,7 +68,8 @@ def log_trajectory(model, x, direction, config, it, limits=(-5, 5)):
 
 
 @torch.no_grad()
-def log_ebm(energy, fwd_model, dataset_sampler, config, it, limits=(-5, 5)):
+def log_ebm(energy, fwd_model, dataset_sampler, config, it, 
+            limits=(-5, 5), n_points=200):
     dt = config.dt
     t_max = config.t_max
     n_steps = config.n_steps
@@ -91,7 +93,8 @@ def log_ebm(energy, fwd_model, dataset_sampler, config, it, limits=(-5, 5)):
     axes[0].set_ylim(*limits)
 
     # Energy function plot
-    x = torch.linspace(*limits, 200).to(config.device)  # E y = # Ensure tensor is on the correct device torch.linspace(*limits, 200).to(config.device)  # Ensure tensor is on the correct device
+    x = torch.linspace(*limits, n_points).to(config.device)
+    y = torch.linspace(*limits, n_points).to(config.device)
     X, Y = torch.meshgrid(x, y, indexing='ij')
     grid_points = torch.stack([X, Y], axis=-1).reshape(-1, 2).float().to(config.device)
 
@@ -136,7 +139,7 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
             assert not torch.isnan(loss).any(), "backward loss is NaN"
             
             bwd_optim.step()
-            bwd_scheduler.step()
+            # bwd_scheduler.step()
 
         # if we start using bigger num_bwd_iters, we should conside
         # changing the way we log the backward loss
@@ -232,7 +235,8 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
         # LOG LANDEVIN TRAJECTORY
         if it % 2000 == 0 and it > 0:
             trajectory, timesteps = langevin_dynamics(energy, ld_step_size=0.0001, 
-                                                      n_steps=3001, log_interval=500, device=device)
+                                                      n_steps=3001, log_interval=500, 
+                                                      device=device)
             
             trajectory.append(dataset_sampler.sample(512).to(device))
             timesteps.append("real samples")
