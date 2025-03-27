@@ -155,12 +155,12 @@ def compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p, x, dt, t_max,
 
 def compute_fwd_vargrad_loss(fwd_model, bwd_model, log_p_1, x, dt, t_max, 
                              num_t_steps,p1_buffer = None, n_trajectories: int = 2, 
-                             reg_coeff: float = 0.0, clip_loss: bool = False,
+                             reg_coeff: float = 0.0,
                              clip_range: tuple[float, float] = (-1000.0, 1000.0)):
     log, reg = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, 
                                              x, dt, t_max, num_t_steps, 
                                              p1_buffer=p1_buffer, reg_coeff=reg_coeff)
-    if clip_loss:
+    if clip_range is not None:
         log = log.clip(*clip_range)
 
     log = log.reshape(n_trajectories, -1)

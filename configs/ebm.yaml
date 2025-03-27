@@ -34,8 +34,11 @@ train:
   energy_lr: 2e-4
   enegy_ema_decay: 0.999
 
-  lr_schedule_gamma: 0.8
-  lr_schedule_milestones: [2500, 6000, 12000]
+  ebm_loss_alpha: 0.01
+  ebm_reg_type: l2
+
+  lr_schedule_gamma: 0.4
+  lr_schedule_milestones: [2500, 9000]
   log_interval: 100
   noise_std: 0.7
   batch_size: 512
@@ -43,7 +46,7 @@ train:
   p1_buffer_size: 2048
   num_iters: 20000
   num_bwd_iters: 1
-  num_fwd_iters: 5
+  num_fwd_iters: 1
   num_energy_iters: 1
 
   device: cpu

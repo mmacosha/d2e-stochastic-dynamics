@@ -19,7 +19,6 @@ from utils import plot_trajectory
 from model import (
     SimpleNet, Energy, 
     ReferenceProcess2, 
-    MNISTEnergy, MNISTSampler
 )
 
 from samplers import losses
@@ -93,13 +92,13 @@ def log_ebm(energy, fwd_model, dataset_sampler, config, it, limits=(-5, 5)):
     # Energy function plot
     x = torch.linspace(*limits, 200)
     y = torch.linspace(*limits, 200)
-    X, Y = torch.meshgrid(x, y)
+    X, Y = torch.meshgrid(x, y, indexing='ij')
     grid_points = torch.stack([X, Y], axis=-1).reshape(-1, 2).float()
 
-    log_density = - energy(grid_points).detach()
+    log_density = - energy(grid_points)
     log_density = log_density - log_density.max() 
 
-    Z = log_density.numpy().reshape(200, 200).T
+    Z = log_density.numpy().reshape(200, 200)
 
     contour = axes[1].contour(X, Y, Z, levels=7, colors='k')
     axes[1].clabel(contour, inline=True, fontsize=6)
@@ -127,10 +126,8 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
     for it in trange(train_config.num_iters, desc="EBM training"):        
         # TRAIN BACKWARD PROCESS
         x_0_train = dataset_sampler.sample(train_config.batch_size).to(device)
-
         for _ in range(train_config.num_bwd_iters):
             bwd_optim.zero_grad(set_to_none=True)
-
             x_0 = x_0_train + torch.randn_like(x_0_train) * train_config.noise_std
 
             _fwd_model = ref_process if it == 0 else fwd_model
@@ -174,13 +171,14 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
             
             x_0 = x_0.repeat(n_trajectories, 1)
             x_0 = x_0 + torch.randn_like(x_0) * train_config.noise_std
+            
             loss = losses.compute_fwd_vargrad_loss(
                 fwd_model, bwd_model, 
                 lambda x: - energy(x),
                 x_0, dt, t_max, n_steps, 
                 p1_buffer=p1_buffer,
                 n_trajectories=n_trajectories,
-                clip_loss=True
+                clip_range=(-1000, 1000)
             )
             assert not torch.isnan(loss).any(), "forward loss is NaN"
 
@@ -203,12 +201,15 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
         for _ in range(train_config.num_energy_iters):
             with torch.no_grad():
                 x_0 = dataset_sampler.sample(train_config.batch_size).to(device)
-                x_0 = x_0 + torch.randn_like(x_0) * train_config.noise_std * max(it / 2500, 1.0)
+                x_0 = x_0 + torch.randn_like(x_0) \
+                    * train_config.noise_std * max(it / 2500, 1.0)
                 x_1 = sample_trajectory(fwd_model, x_0, "forward", dt, 
                                         n_steps, t_max, only_last=True)
             
             energy_optim.zero_grad(set_to_none=True)
-            loss = losses.ebm_loss(energy, x_0, x_1, alpha=5.0, reg_type='l1')
+            loss = losses.ebm_loss(energy, x_0, x_1, 
+                                   alpha=train_config.ebm_loss_alpha, 
+                                   reg_type=train_config.ebm_reg_type)
             
             assert not torch.isnan(loss).any(), "energy loss is NaN"
             loss.backward()
@@ -267,10 +268,6 @@ def main(config):
     fwd_model = SimpleNet(**config.fwd_model_params).to(device)
     bwd_model = SimpleNet(**config.bwd_model_params).to(device)
     
-    # energy = MNISTEnergy()
-    # fwd_model = MNISTSampler()
-    # bwd_model = MNISTSampler()
-
     energy_ema = EMA(energy, decay=config.train.enegy_ema_decay)
 
     energy_optim = torch.optim.Adam(energy.parameters(), lr=config.train.energy_lr)
