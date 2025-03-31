@@ -3,8 +3,9 @@ import torch
 
 
 class ReplayBuffer:
-    def __init__(self, size):
+    def __init__(self, size, update_fraction=1.0):
         self.size = size
+        self.update_fraction = update_fraction
         self.buffer = []
 
     @torch.no_grad()
@@ -13,9 +14,10 @@ class ReplayBuffer:
         return torch.cat(batch, dim=0)
 
     @torch.no_grad()
-    def update(self, batch, fraction: float = 1.0):
-        if fraction < 1.0:
-            mask = torch.rand(batch.size(0), device=batch.device) < fraction
+    def update(self, batch):
+        if self.update_fraction < 1.0:
+            mask = torch.rand(batch.size(0), 
+                              device=batch.device) < self.update_fraction
             batch = batch[mask]
 
         self.buffer = self.buffer[-self.size + batch.size(0):]

@@ -1,6 +1,6 @@
 """
-    This file is almost exact copy of emb.ipynb, intended for running the training
-    via cli. It is supposed to be used for large experiments.
+    This file is almost exact copy of emb.ipynb, intended for running 
+    the training via cli. It is supposed to be used for large experiments.
 """
 import math
 import hydra
@@ -116,6 +116,16 @@ def log_ebm(energy, fwd_model, dataset_sampler, config, it,
     plt.close(figure)
 
 
+class FixedSizeDataset:
+    def __init__(self, dataset):
+        self.dataset = dataset
+        self.size = dataset.size(0)
+
+    def sample(self, batch_size):
+        idxs = torch.randint(0, self.size, (batch_size,))
+        return self.dataset[idxs]
+
+
 def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
                  fwd_optim, bwd_optim, energy_optim, p1_buffer,
                  fwd_scheduler, bwd_scheduler, energy_scheduler,
@@ -125,32 +135,40 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
     n_steps = train_config.n_steps
     n_trajectories = train_config.n_trajectories
     device = train_config.device
+    noise_std = train_config.noise_std
+    batch_size = train_config.batch_size
+
+    x_train = dataset_sampler.sample(batch_size)
 
     for it in trange(train_config.num_iters, desc="EBM training"):        
         # TRAIN BACKWARD PROCESS
-        x_0_train = dataset_sampler.sample(train_config.batch_size).to(device)
         for _ in range(train_config.num_bwd_iters):
             bwd_optim.zero_grad(set_to_none=True)
-            x_0 = x_0_train + torch.randn_like(x_0_train) * train_config.noise_std
+
+            if train_config.resample_x_0:
+                x_train = dataset_sampler.sample(batch_size)
+            x_0 = x_train + torch.randn_like(x_train) * noise_std
 
             _fwd_model = ref_process if it == 0 else fwd_model
-            loss = losses.compute_bwd_tlm_loss(_fwd_model, bwd_model, 
-                                               x_0, dt, t_max,  n_steps)
+            loss = losses.compute_bwd_tlm_loss(
+                _fwd_model, bwd_model, x_0, dt, t_max, n_steps
+            )
+        
             assert not torch.isnan(loss).any(), "backward loss is NaN"
-            
             bwd_optim.step()
-            # bwd_scheduler.step()
+            bwd_scheduler.step()
 
-        # if we start using bigger num_bwd_iters, we should conside
-        # changing the way we log the backward loss
+        # if we start using bigger num_bwd_iters, we should 
+        # conside changing the way we log the backward loss.
         wandb.log({"backward_loss": loss.item()}, step=it)
+        wandb.log({"backward_lr": bwd_optim.param_groups[0]["lr"]}, step=it)
 
         # LOG BACKWARD TRAJECTORY
         if it % train_config.log_interval == 0:
             if p1_buffer.is_empty():
-                x_0 = dataset_sampler.sample(train_config.batch_size).to(device)
-                x_0 = x_0 + torch.randn_like(x_0) * train_config.noise_std
-                x_1 = sample_trajectory(fwd_model, x_0, "forward", dt, 
+                x_0_log = dataset_sampler.sample(train_config.batch_size).to(device)
+                x_0_log = x_0_log + torch.randn_like(x_0_log) * train_config.noise_std
+                x_1 = sample_trajectory(fwd_model, x_0_log, "forward", dt, 
                                         n_steps, t_max, only_last=True)
             else:
                 x_1 = p1_buffer.sample(train_config.batch_size).to(device)
@@ -161,57 +179,50 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
         for _ in range(train_config.num_fwd_iters):
             fwd_optim.zero_grad(set_to_none=True)
 
-            bs = train_config.batch_size // n_trajectories
-            x_0 = x_0_train[:bs].clone()
-
-            with torch.no_grad():
-                x_0[:bs//3] = sample_trajectory(
-                    bwd_model, x_0[:bs//3], "backward", 
-                    dt, n_steps, t_max, only_last=True
-                ).to(device)
-                if not p1_buffer.is_empty():
-                    x_0[-(bs//3):] = p1_buffer.sample(bs//3).to(device)
-            
-            x_0 = x_0.repeat(n_trajectories, 1)
-            x_0 = x_0 + torch.randn_like(x_0) * train_config.noise_std
+            if train_config.resample_x_0:
+                x_train = dataset_sampler.sample(batch_size)
+            x_0 = x_train[:batch_size // n_trajectories].repeat(n_trajectories, 1)
+            x_0 = x_0 + torch.randn_like(x_0) * noise_std
             
             loss = losses.compute_fwd_vargrad_loss(
-                fwd_model, bwd_model, 
-                lambda x: - energy(x),
+                fwd_model, bwd_model, lambda x: - energy(x),
                 x_0, dt, t_max, n_steps, 
                 p1_buffer=p1_buffer,
                 n_trajectories=n_trajectories,
-                clip_range=(-1000, 1000)
+                clip_range=(-10000, 10000)
             )
+            
             assert not torch.isnan(loss).any(), "forward loss is NaN"
-
             loss.backward()
             fwd_optim.step()
-
             fwd_scheduler.step()
 
         # if we start using bigger num_fwd_iters, we should conside
         # changing the way we log the forward loss
         wandb.log({"forward_loss": loss.item()}, step=it)
+        wandb.log({"forward_lr": fwd_optim.param_groups[0]["lr"]}, step=it)
 
         # LOG FORWARD TRAJECTORY
         if it % train_config.log_interval == 0:
-            x_0 = dataset_sampler.sample(train_config.batch_size).to(device)
-            x_0 = x_0 + torch.randn_like(x_0) * train_config.noise_std
-            log_trajectory(fwd_model, x_0, "forward", train_config, it)
+            x_0_log = dataset_sampler.sample(train_config.batch_size).to(device)
+            x_0_log = x_0_log + torch.randn_like(x_0_log) * train_config.noise_std
+            log_trajectory(fwd_model, x_0_log, "forward", train_config, it)
 
         # TRAIN ENERGY FUNCTION
         for _ in range(train_config.num_energy_iters):
-            with torch.no_grad():
-                x_0 = dataset_sampler.sample(train_config.batch_size).to(device)
-                x_0 = x_0 + torch.randn_like(x_0) \
-                    * train_config.noise_std * max(it / 2500, 1.0)
-                x_1 = sample_trajectory(fwd_model, x_0, "forward", dt, 
-                                        n_steps, t_max, only_last=True).to(device)
+            if train_config.resample_x_0:
+                x_train = dataset_sampler.sample(batch_size)
+            
+            if train_config.use_samples_from_buffer:
+                x_1 = p1_buffer.sample(batch_size)
+            else:
+                x_train_noisy = x_train + torch.randn_like(x_train) * noise_std
+                x_1 = sample_trajectory(fwd_model, x_train_noisy, "forward", dt, 
+                                        n_steps, t_max, only_last=True)
             
             energy_optim.zero_grad(set_to_none=True)
-            loss = losses.ebm_loss(energy, x_0, x_1, 
-                                   alpha=train_config.ebm_loss_alpha, 
+            loss = losses.ebm_loss(energy, x_train, x_1, 
+                                   alpha=train_config.ebm_loss_alpha,
                                    reg_type=train_config.ebm_reg_type)
             
             assert not torch.isnan(loss).any(), "energy loss is NaN"
@@ -219,12 +230,11 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
 
             energy_optim.step()
             energy_ema.update()
-
-            energy_scheduler.step()
         
         # if we start using bigger num_energy_iters, we should conside
         # changing the way we log the energy loss
         wandb.log({"energy_loss": loss.item()}, step=it)
+        wandb.log({"energy_lr": energy_optim.param_groups[0]["lr"]}, step=it)
 
         # LOG ENERGY FUNCTION
         if it % train_config.log_interval == 0:
@@ -233,28 +243,21 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
             energy_ema.restore()
 
         # LOG LANDEVIN TRAJECTORY
-        if it % 2000 == 0 and it > 0:
-            trajectory, timesteps = langevin_dynamics(energy, ld_step_size=0.0001, 
-                                                      n_steps=3001, log_interval=500, 
-                                                      device=device)
+        if it % train_config.langevin_log_interval == 0 and it > 0:
+            trajectory, timesteps = langevin_dynamics(
+                energy, ld_step_size=0.0001, n_steps=3001, 
+                log_interval=500, device=device
+            )
             
-            trajectory.append(dataset_sampler.sample(512).to(device))
+            trajectory.append(
+                dataset_sampler.sample(train_config.batch_size).to(device)
+            )
             timesteps.append("real samples")
 
             figure = plot_trajectory(trajectory, timesteps, 
                                      title="langevin", limits=(-5, 5))
             wandb.log({"langevin_trajectory": wandb.Image(figure)}, step=it)
             plt.close(figure)
-
-
-class FixedSizeDataset:
-    def __init__(self, dataset):
-        self.dataset = dataset
-        self.size = dataset.size(0)
-
-    def sample(self, batch_size):
-        idxs = torch.randint(0, self.size, (batch_size,))
-        return self.dataset[idxs]
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="ebm")
@@ -296,7 +299,8 @@ def main(config):
         gamma=lr_schedule_gamma
     )
      
-    p1_buffer = ReplayBuffer(config.train.p1_buffer_size)
+    p1_buffer = ReplayBuffer(config.train.p1_buffer_size,
+                             update_fraction=1.0)
     
     # setup data
     means = torch.tensor([
@@ -307,7 +311,7 @@ def main(config):
     gm_sampler = GaussMix(means, sigmas)
     dataset_sampler = FixedSizeDataset(gm_sampler.sample(1024))
 
-    wandb.init(project="ebm", name='sb_emb_training-8_gaussians', 
+    wandb.init(project=config.project, name=config.name, mode=config.mode, 
                config=OmegaConf.to_container(config))
     
     train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
@@ -317,3 +321,24 @@ def main(config):
 
 if __name__ == "__main__":
     main()
+
+
+# with torch.no_grad():
+#     local_batch_size = batch_size // n_trajectories
+#     bwd_from_data = int(train_config.bwd_from_data * local_batch_size)
+#     bwd_from_buffer = int(train_config.bwd_from_buffer * local_batch_size)
+
+#     if bwd_from_data > 0:
+#         x_0_from_bwd = sample_trajectory(
+#             bwd_model, x_0[0 : bwd_from_data], "backward", 
+#             dt, n_steps, t_max, only_last=True
+#         )
+#         x_0[0 : bwd_from_data] = x_0_from_bwd
+    
+#     if bwd_from_buffer > 0 and not p1_buffer.is_empty():
+#         x_1 = p1_buffer.sample(bwd_from_buffer)
+#         x_0_from_bwd = sample_trajectory(
+#                 bwd_model, x_1, "backward", 
+#                 dt, n_steps, t_max, only_last=True
+#             )  
+#         x_0[bwd_from_data: bwd_from_data + bwd_from_buffer] = x_0_from_bwd
