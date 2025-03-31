@@ -8,6 +8,7 @@ import wandb
 import torch
 import random
 import numpy as np
+from pathlib import Path
 
 from tqdm.auto import trange
 import matplotlib.pyplot as plt
@@ -124,6 +125,19 @@ class FixedSizeDataset:
     def sample(self, batch_size):
         idxs = torch.randint(0, self.size, (batch_size,))
         return self.dataset[idxs]
+
+
+@torch.no_grad()
+def save_checkpoint(fwd_model, bwd_model, energy, it):
+    save_checkpoint = {
+        "fwd_model": fwd_model.state_dict(),
+        "bwd_model": bwd_model.state_dict(),
+        "energy": energy.state_dict(),
+    }
+    checkpoint_dir = Path(wandb.run.dir) / "files" / "checkpoints"
+    checkpoint_name = f"checkpoint_{it}.pt"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    torch.save(save_checkpoint, checkpoint_dir / checkpoint_name)
 
 
 def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
@@ -258,6 +272,10 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
                                      title="langevin", limits=(-5, 5))
             wandb.log({"langevin_trajectory": wandb.Image(figure)}, step=it)
             plt.close(figure)
+
+        if (it > 0 and it % train_config.save_interval == 0) \
+            or it + 1 == train_config.num_iters:
+            save_checkpoint(fwd_model, bwd_model, energy, it)
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="ebm")

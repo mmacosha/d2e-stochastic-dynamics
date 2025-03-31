@@ -1,4 +1,7 @@
 seed: 3704
+name: sb-ebm
+project: ebm
+mode: online
 
 energy_model_params:
   in_dim: 2
@@ -13,40 +16,51 @@ fwd_model_params:
   in_dim: 3
   t_emb_size: null
   n_main_body_layers: 1
-  predict_log_var: True
+  predict_log_var: true
 
 bwd_model_params:
   x_emb_size: 64
   in_dim: 3
   t_emb_size: null
   n_main_body_layers: 1
-  predict_log_var: True
+  predict_log_var: true
 
 train:
-  reference_alpha: 0.25
+  reference_alpha: 0.24
   dt: 0.006
   t_max: 0.12
   n_steps: 20
+
+  batch_size: 512
+  resample_x_0: true
   n_trajectories: 2
 
-  fwd_lr: 2e-4
   bwd_lr: 1e-3
+  fwd_lr: 2e-4
   energy_lr: 2e-4
-  enegy_ema_decay: 0.999
 
-  ebm_loss_alpha: 0.01
+  use_samples_from_buffer: false
+  enegy_ema_decay: 0.999
+  ebm_loss_alpha: 0.0
   ebm_reg_type: l2
 
+  
   lr_schedule_gamma: 0.4
-  lr_schedule_milestones: [2500, 9000]
-  log_interval: 100
+  lr_schedule_milestones: [1500, 5000]
+  fwd_loss_clip_range: [-10000, 10000]
+
   noise_std: 0.7
-  batch_size: 512
 
   p1_buffer_size: 2048
-  num_iters: 20000
+  bwd_from_data: 0.0
+  bwd_from_buffer: 0.0
+  
+  num_iters: 10000
   num_bwd_iters: 1
-  num_fwd_iters: 1
+  num_fwd_iters: 5
   num_energy_iters: 1
+  log_interval: 100
+  langevin_log_interval: 2000
+  save_interval: 2000
 
   device: cpu
