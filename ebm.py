@@ -167,7 +167,7 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
             loss = losses.compute_bwd_tlm_loss(
                 _fwd_model, bwd_model, x_0, dt, t_max, n_steps
             )
-        
+
             assert not torch.isnan(loss).any(), "backward loss is NaN"
             bwd_optim.step()
             bwd_scheduler.step()
@@ -205,9 +205,9 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
                 n_trajectories=n_trajectories,
                 clip_range=(-10000, 10000)
             )
-            
             assert not torch.isnan(loss).any(), "forward loss is NaN"
             loss.backward()
+            
             fwd_optim.step()
             fwd_scheduler.step()
 
@@ -243,6 +243,7 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
             loss.backward()
 
             energy_optim.step()
+            energy_scheduler.step()
             energy_ema.update()
         
         # if we start using bigger num_energy_iters, we should conside

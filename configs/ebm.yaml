@@ -45,8 +45,8 @@ train:
   ebm_reg_type: l2
 
   
-  lr_schedule_gamma: 0.4
-  lr_schedule_milestones: [1500, 5000]
+  lr_schedule_gamma: 0.5
+  lr_schedule_milestones: [1500, 4000, 6000]
   fwd_loss_clip_range: [-10000, 10000]
 
   noise_std: 0.7
