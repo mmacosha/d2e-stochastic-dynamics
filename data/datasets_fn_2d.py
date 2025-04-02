@@ -22,7 +22,7 @@ def mix_of_gaussians(batch_size, means=None, sigmas=None):
     return (z * sigmas + means).view(-1, 2)
 
 
-def two_moons(batch_size, shift=None, noise=None):
+def two_moons(batch_size, shift=None, noise=None, scale: float = 1.0):
     samples, _ = datasets.make_moons(batch_size, noise=(noise or 0))
     samples[:, 0] = samples[:, 0] * 2 / 3 - 1 / 3
     samples[:, 1] = samples[:, 1] * 4 / 3 - 1 / 3

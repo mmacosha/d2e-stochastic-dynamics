@@ -3,7 +3,7 @@ import torch
 from samplers import utils
 
 
-def ebm_loss(energy_model, positive_samples, negative_samples, alpha=1.0, 
+def ebm_loss(energy_model, positive_samples, negative_samples, alpha=0.0, 
              reg_type: str = 'l2'):
     """Compute EBM loss."""
     positive_energy = energy_model(positive_samples).mean()
@@ -20,6 +20,10 @@ def ebm_loss(energy_model, positive_samples, negative_samples, alpha=1.0,
 
 def log_normal_density(x, mean, log_var):
     """Compute log dencity normal distribution."""
+    batch_size = x.size(0)
+    x = x.view(batch_size, -1)
+    mean = mean.view(batch_size, -1)
+    log_var = log_var.view(batch_size, -1)
     return - 0.5 * (log_var + torch.exp(- log_var) * (mean - x).pow(2)).sum(-1)
 
 
@@ -58,10 +62,10 @@ def compute_bwd_tlm_loss(fwd_model, bwd_model, x_0, dt, t_max, n_steps,
         t = torch.ones(x_t_m_dt.size(0), device=x_t_m_dt.device) * t_step
 
         with torch.no_grad():
-            bwd_mean, bwd_log_var = utils.get_mean_log_var(
+            fwd_mean, fwd_log_var = utils.get_mean_log_var(
                 fwd_model, x_t_m_dt, t - dt, dt
             )
-            x_t = bwd_mean + torch.randn_like(bwd_mean) * bwd_log_var.exp().sqrt()
+            x_t = fwd_mean + torch.randn_like(fwd_mean) * fwd_log_var.exp().sqrt()
         
         bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, x_t, t, dt)
         loss = log_normal_density(x_t_m_dt, bwd_mean, bwd_log_var)

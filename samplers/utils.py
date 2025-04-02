@@ -8,7 +8,7 @@ def extract_into_tensor(tensor, shape):
 
 
 def get_mean_log_var(model, x, t, dt):
-    log_var = torch.as_tensor(2.0 * dt, device=x.device).log()
+    log_var = torch.log(torch.ones_like(x) * 2.0 * dt)
     output = model(x, t)
     
     if output.contains('log_var'):
@@ -20,6 +20,8 @@ def get_mean_log_var(model, x, t, dt):
     if output.drift.isnan().any():
         print(output.drift)
         assert 0, "drift is NaN"
+    
+
     mean = x + output.drift * dt
     return mean, log_var
 
@@ -33,7 +35,7 @@ def sample_trajectory(model, x_start, direction, dt, n_steps, t_max,
                       only_last: bool = False, return_timesteps: bool = False):
     assert direction in {"forward", "backward"}
     trajectory = [x_start]
-    timesteps = [f"timestep {t_max if direction == 'backward' else 0}"]
+    timesteps = [f"{t_max if direction == 'backward' else 0}"]
 
     for t_step in (
             torch.linspace(dt, t_max, n_steps).flip(-1) \
@@ -41,7 +43,7 @@ def sample_trajectory(model, x_start, direction, dt, n_steps, t_max,
             else torch.linspace(0, t_max - dt, n_steps)
         ):
         shift = - dt if direction == "backward" else + dt
-        timesteps.append(f"timestep {t_step.item() + shift:.3f}")
+        timesteps.append(f"{t_step.item() + shift:.3f}")
         
         t = torch.ones(x_start.size(0), device=x_start.device) * t_step
         trajectory.append(make_euler_maruyama_step(model, trajectory[-1], t, dt))
