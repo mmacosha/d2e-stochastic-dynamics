@@ -10,6 +10,9 @@ import random
 import numpy as np
 from pathlib import Path
 
+import torchvision
+from torchvision.transforms import v2
+
 from tqdm.auto import trange
 import matplotlib.pyplot as plt
 from omegaconf import OmegaConf
@@ -17,15 +20,13 @@ from omegaconf import OmegaConf
 from samplers.utils import sample_trajectory
 from utils import plot_trajectory
 
-from models.model import (
-    SimpleNet, Energy, 
-    ReferenceProcess2, 
-)
+from models.mnist_models import MNISTEnergy, MNISTSampler
+from models.ref_process import ReferenceProcess2
 
 from samplers import losses
 from buffers import ReplayBuffer
-from datasets_2d import GaussMix
-from ema import EMA
+from data.infinite_loader import InfiniteDataLoader
+from utils import EMA
 
 
 def set_seed(seed, device):
@@ -61,15 +62,47 @@ def langevin_dynamics(energy, init_step_size=0.0001, n_steps=3001,
 
 
 @torch.no_grad()
-def log_trajectory(model, x, direction, config, it, limits=(-5, 5)):
-    x = x.to(config.device)  # Ensure input tensor is on the correct device
+def plot_image_trajectory(images: list[torch.Tensor], 
+                          timesteps: list[str]=None, 
+                          title='', 
+                          apply_rescale=True):
+    n_images = len(images)
+    h = images[0].size(2)
+
+    images = torch.stack(images, dim=0).permute(1, 0, 2, 3, 4)
+    images = images.reshape(-1, 1, h, h)
+    
+    if apply_rescale:
+        images = (images + 1) / 2
+    images = torch.clip(images, 0.0, 1.0)
+
+    image_grid = torchvision.utils.make_grid(images, nrow=n_images, 
+                                             padding=1, pad_value=1)
+    
+    fig = plt.figure(figsize=(12, 6))
+    plt.title(title)
+    plt.imshow(image_grid.permute(1, 2, 0))
+    if timesteps is not None:
+        tick_positions = np.arange(n_images) * (h + 1) + 1 + h // 2
+        plt.xticks(tick_positions, timesteps, rotation=0)
+        plt.xlabel("Image Index")
+    else:
+        plt.xticks([])
+    plt.yticks([])
+    return fig
+
+
+@torch.no_grad()
+def log_trajectory(model, x, direction, config, it):
+    x = x.to(config.device)
     dt = config.dt
     t_max = config.t_max
     n_steps = config.n_steps
     trajectory, timesteps = sample_trajectory(model, x, direction, dt, n_steps, 
                                               t_max, return_timesteps=True)
-    figure = plot_trajectory(trajectory, timesteps, 
-                             title=direction, limits=limits)
+    figure = plot_image_trajectory(trajectory, timesteps,
+                                   title=f"{direction} trajectory", 
+                                   apply_rescale=True)
     wandb.log({f"{direction}_trajectory": wandb.Image(figure)}, step=it)
     plt.close(figure)
 
@@ -258,17 +291,19 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
         wandb.log({"energy_lr": energy_optim.param_groups[0]["lr"]}, step=it)
 
         # LOG ENERGY FUNCTION
-        if it % train_config.log_interval == 0:
-            energy_ema.apply_shadow()
-            log_ebm(energy, fwd_model, dataset_sampler, train_config, it)
-            energy_ema.restore()
+        # if it % train_config.log_interval == 0:
+        #     energy_ema.apply_shadow()
+        #     log_ebm(energy, fwd_model, dataset_sampler, train_config, it)
+        #     energy_ema.restore()
 
         # LOG LANDEVIN TRAJECTORY
         if it % train_config.langevin_log_interval == 0 and it > 0:
+            energy_ema.apply_shadow()
             trajectory, timesteps = langevin_dynamics(
                 energy, ld_step_size=0.0001, n_steps=3001, 
                 log_interval=500, device=device
             )
+            energy_ema.restore()
             
             trajectory.append(
                 dataset_sampler.sample(train_config.batch_size).to(device)
@@ -285,7 +320,7 @@ def train_sb_ebm(fwd_model, bwd_model, energy, energy_ema, ref_process,
             save_checkpoint(fwd_model, bwd_model, energy, it)
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="ebm")
+@hydra.main(version_base=None, config_path="configs", config_name="ebm_mnist")
 def main(config):
     # Set device
     device = torch.device(config.train.device if torch.cuda.is_available() else "cpu")
@@ -296,9 +331,9 @@ def main(config):
     # setup models
     ref_process = ReferenceProcess2(alpha=config.train.reference_alpha)
     
-    energy = Energy(**config.energy_model_params).to(device)
-    fwd_model = SimpleNet(**config.fwd_model_params).to(device)
-    bwd_model = SimpleNet(**config.bwd_model_params).to(device)
+    energy = MNISTEnergy().to(device)
+    fwd_model = MNISTSampler(**config.fwd_model_params).to(device)
+    bwd_model = MNISTSampler(**config.bwd_model_params).to(device)
     
     energy_ema = EMA(energy, decay=config.train.enegy_ema_decay)
 
@@ -328,13 +363,15 @@ def main(config):
                              update_fraction=1.0)
     
     # setup data
-    means = torch.tensor([
-        [-2, 2], [2, 2], [-3, 0], [3, 0],
-        [0, -3], [0, 3], [-2, -2], [2, -2]
-    ]).float() * 0.99
-    sigmas = torch.ones_like(means) * 0.1
-    gm_sampler = GaussMix(means, sigmas)
-    dataset_sampler = FixedSizeDataset(gm_sampler.sample(1024))
+    mnist_transform = v2.Compose([
+        v2.ToImage(), v2.ToDtype(torch.float32, scale=True),
+        v2.Resize((8, 8)), v2.Lambda(lambda x: 2*x - 1)
+    ])
+    mnist_dataset = torchvision.datasets.MNIST('./mnist/data', train=True, 
+                                               download=True,
+                                               transform=mnist_transform)
+
+    dataset_sampler = InfiniteDataLoader(mnist_dataset, batch_size=16, shuffle=True)
 
     wandb.init(project=config.project, name=config.name, mode=config.mode, 
                config=OmegaConf.to_container(config))
@@ -346,24 +383,3 @@ def main(config):
 
 if __name__ == "__main__":
     main()
-
-
-# with torch.no_grad():
-#     local_batch_size = batch_size // n_trajectories
-#     bwd_from_data = int(train_config.bwd_from_data * local_batch_size)
-#     bwd_from_buffer = int(train_config.bwd_from_buffer * local_batch_size)
-
-#     if bwd_from_data > 0:
-#         x_0_from_bwd = sample_trajectory(
-#             bwd_model, x_0[0 : bwd_from_data], "backward", 
-#             dt, n_steps, t_max, only_last=True
-#         )
-#         x_0[0 : bwd_from_data] = x_0_from_bwd
-    
-#     if bwd_from_buffer > 0 and not p1_buffer.is_empty():
-#         x_1 = p1_buffer.sample(bwd_from_buffer)
-#         x_0_from_bwd = sample_trajectory(
-#                 bwd_model, x_1, "backward", 
-#                 dt, n_steps, t_max, only_last=True
-#             )  
-#         x_0[bwd_from_data: bwd_from_data + bwd_from_buffer] = x_0_from_bwd

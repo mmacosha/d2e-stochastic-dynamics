@@ -1,7 +1,12 @@
+import torch
+import torch.nn as nn
+from models.utils import ModelOutput, fourier_proj
+from models.module import Module
 
-class MNISTEnergy(nn.Module):
+
+class MNISTEnergy(Module):
     def __init__(self, as_cls: bool = False):
-        super().__init__()
+        super().__init__(as_cls=as_cls)
         self.as_cls = as_cls
         self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
@@ -38,11 +43,17 @@ class ConvBlock(nn.Module):
         return self.block(x)
 
 
-class MNISTSampler(nn.Module):
+class MNISTSampler(Module):
     def __init__(self, in_channels=1, out_channels=1, 
                  base_channels=32, t_emb_size=32,
                  train_var: bool = False):
-        super().__init__()
+        super().__init__(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            base_channels=base_channels,
+            t_emb_size=t_emb_size,
+            train_var=train_var,
+        )
         self.train_var = train_var
         self.t_emb_size = t_emb_size
         self.t_embed = nn.Linear(t_emb_size, base_channels)
@@ -54,9 +65,11 @@ class MNISTSampler(nn.Module):
 
         self.bottleneck = ConvBlock(base_channels * 2, base_channels * 4)
 
-        self.upconv2 = nn.ConvTranspose2d(base_channels * 4, base_channels * 2, kernel_size=2, stride=2)
+        self.upconv2 = nn.ConvTranspose2d(base_channels * 4, base_channels * 2, 
+                                          kernel_size=2, stride=2)
         self.decoder2 = ConvBlock(base_channels * 4, base_channels * 2)
-        self.upconv1 = nn.ConvTranspose2d(base_channels * 2, base_channels, kernel_size=2, stride=2)
+        self.upconv1 = nn.ConvTranspose2d(base_channels * 2, base_channels, 
+                                          kernel_size=2, stride=2)
         self.decoder1 = ConvBlock(base_channels * 2, base_channels)
 
         self.drift_conv = nn.Conv2d(base_channels, out_channels, kernel_size=1)

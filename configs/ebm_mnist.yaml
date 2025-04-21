@@ -1,0 +1,58 @@
+seed: 3704
+name: sb-ebm-mnist
+project: ebm
+mode: online
+
+fwd_model_params:
+  in_channels: 1
+  out_channels: 1
+  base_channels: 16
+  t_emb_size: 16
+  train_var: true
+
+bwd_model_params:
+  in_channels: 1
+  out_channels: 1
+  base_channels: 16
+  t_emb_size: 16
+  train_var: true
+
+train:
+  reference_alpha: 0.24
+  dt: 0.006
+  t_max: 0.12
+  n_steps: 20
+
+  batch_size: 512
+  resample_x_0: true
+  n_trajectories: 2
+
+  bwd_lr: 1e-3
+  fwd_lr: 2e-4
+  energy_lr: 2e-4
+
+  use_samples_from_buffer: false
+  enegy_ema_decay: 0.9999
+  ebm_loss_alpha: 0.0
+  ebm_reg_type: l2
+
+  
+  lr_schedule_gamma: 0.5
+  lr_schedule_milestones: [1500, 4000, 6000]
+  fwd_loss_clip_range: [-10000, 10000]
+
+  noise_std: 0.7
+
+  p1_buffer_size: 1024
+  bwd_from_data: 0.0
+  bwd_from_buffer: 0.0
+  
+  num_iters: 10000
+  num_bwd_iters: 1
+  num_fwd_iters: 5
+  num_energy_iters: 1
+  log_interval: 100
+  langevin_log_interval: 2000
+  save_interval: 2000
+
+  device: cpu
