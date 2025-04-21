@@ -4,6 +4,7 @@ from torchvision import datasets, transforms
 import numpy as np
 import random
 
+
 class ClassFilteredMNIST(Dataset):
     """MNIST dataset that can sample from specific classes only."""
     

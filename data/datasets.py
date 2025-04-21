@@ -82,6 +82,20 @@ class TwoCircles(base.Dataset):
         return next(_iterator())
 
 
+@registry.add(name="two_circles_custom")
+class TwoCirclesCustom(base.Dataset):
+    def __init__(self, r1, r2, noise=None):
+        self.r1 = r1
+        self.r2 = r2
+        self.noise = noise or 0
+        self.fn = datasets_fn_2d.two_circles
+
+    def sample(self, size: int):
+        def _iterator():
+            yield self.fn(size, self.r1, self.r2, noise=self.noise)
+        return next(_iterator())
+
+
 @registry.add(name="checkboard")
 class Checkboard(base.Dataset):
     def __init__(self, shift=None):

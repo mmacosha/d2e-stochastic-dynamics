@@ -1,5 +1,5 @@
 import torch
-from model import ModelOutput
+from models.model import ModelOutput
 
 
 def extract_into_tensor(tensor, shape):

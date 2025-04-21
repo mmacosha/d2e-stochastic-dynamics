@@ -5,6 +5,52 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+class EMA:
+    def __init__(self, model, decay, start_update=0):
+        self.model = model
+        self.decay = decay
+        self.shadow = {}
+        self.backup = {}
+        self.register()
+        
+        self.curr_update = 0
+        self.start_update = start_update
+
+    def register(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                self.shadow[name] = param.data.clone()
+
+    def update(self):
+        self.curr_update += 1
+        if self.curr_update < self.start_update:
+            for name, param in self.model.named_parameters():
+                if param.requires_grad:
+                    assert name in self.shadow
+                    self.shadow[name] = param.data.clone()
+            return
+
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                assert name in self.shadow
+                new_average = (1.0 - self.decay) * param.data + self.decay * self.shadow[name]
+                self.shadow[name] = new_average.clone()
+
+    def apply_shadow(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                assert name in self.shadow
+                self.backup[name] = param.data
+                param.data = self.shadow[name]
+
+    def restore(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                assert name in self.backup
+                param.data = self.backup[name]
+        self.backup = {}
+
+
 class EMALoss:
     def __init__(self, alpha=0.1):
         self.ema = []

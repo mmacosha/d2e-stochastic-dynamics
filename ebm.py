@@ -17,7 +17,7 @@ from omegaconf import OmegaConf
 from samplers.utils import sample_trajectory
 from utils import plot_trajectory
 
-from model import (
+from models.model import (
     SimpleNet, Energy, 
     ReferenceProcess2, 
 )
@@ -37,20 +37,26 @@ def set_seed(seed, device):
         torch.cuda.manual_seed_all(seed)
 
 
-def langevin_dynamics(energy, ld_step_size=0.0001, n_steps=3001, 
-                      log_interval=500, device="cpu"):
-    x = torch.randn(512, 2).to(device)  # Ensure tensor is on the correct device
+def langevin_dynamics(energy, init_step_size=0.0001, n_steps=3001, 
+                      num_samples=512, log_interval=500, device="cpu"):
+    x = torch.randn(num_samples, 2).to(device)  # Ensure tensor is on the correct device
     trajectory = [x]
     timesteps = [0]
-    for i in range(n_steps):
+    for i in range(1, n_steps + 1):
+        step_size = init_step_size * (0.01 ** (i / n_steps)) 
+        
+        # compute gradient
         _x = x.clone().detach().requires_grad_()
         grad = torch.autograd.grad(energy(_x).sum(), _x)[0]
-        x = x - 0.5 * ld_step_size * grad 
-        x = x + torch.randn_like(x) * math.sqrt(ld_step_size)
+        
+        # make a langevin step
+        x = x - 0.5 * step_size * grad 
+        x = x + torch.randn_like(x) * math.sqrt(step_size)
 
         if i % log_interval == 0:
             trajectory.append(x)
             timesteps.append(i)
+
     return trajectory, timesteps
 
 

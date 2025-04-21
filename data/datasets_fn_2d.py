@@ -1,3 +1,4 @@
+import math
 import torch
 from sklearn import datasets
 
@@ -35,6 +36,15 @@ def two_circles(batch_size, shift=None, noise=None):
     samples, _ = datasets.make_circles(batch_size, noise=(noise or 0))
     samples = torch.from_numpy(samples) + (shift if shift is not None else 0)
     return samples.float()
+
+
+def two_circles_custom(batch_size, r1, r2, noise = 0, scale = 1.0):
+    U = torch.randn(batch_size) * 2 * math.pi
+    c = torch.stack([torch.cos(U), torch.sin(U)], dim=-1)
+    mask = torch.rand_like(U) > 0.5
+    c[mask] *= r1
+    c[~mask] *= r2
+    return (c + torch.randn_like(c) * noise) * scale
 
 
 def s_curve(batch_size, shift=None, noise=None):

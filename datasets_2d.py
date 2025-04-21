@@ -82,40 +82,50 @@ def mix_of_gaussians(batch_size, means=None, sigmas=None):
 
 
 @registry.add(name='two_moons')
-def two_moons(batch_size, shift=None, noise=None):
+def two_moonPins(batch_size, shift=None, noise=None, scale: float = 1.0):
     samples, _ = sk_datasets.make_moons(batch_size, noise=(noise or 0))
     samples[:, 0] = samples[:, 0] * 2 / 3 - 1 / 3
     samples[:, 1] = samples[:, 1] * 4 / 3 - 1 / 3
     samples = torch.from_numpy(samples) + (shift if shift is not None else 0)
-    return samples.float()
+    return samples.float() * scale
 
 
 @registry.add(name='two_circles')
-def two_circles(batch_size, shift=None, noise=None):
+def two_circles(batch_size, shift=None, noise=None, scale: float = 1.0):
     assert noise < 0.04, 'very high noise'
     samples, _ = sk_datasets.make_circles(batch_size, noise=(noise or 0))
     samples = torch.from_numpy(samples) + (shift if shift is not None else 0)
-    return samples.float()
+    return samples.float() * scale
+
+
+@registry.add(name='two_circles_custom')
+def two_circles_custom(batch_size, r1, r2, noise = 0, scale = 1.0):
+    U = torch.randn(batch_size) * 2 * math.pi
+    c = torch.stack([torch.cos(U), torch.sin(U)], dim=-1)
+    mask = torch.rand_like(U) > 0.5
+    c[mask] *= r1
+    c[~mask] *= r2
+    return (c + torch.randn_like(c) * noise) * scale
 
 
 @registry.add(name='s_curve')
-def s_curve(batch_size, shift=None, noise=None):
+def s_curve(batch_size, shift=None, noise=None, scale: float = 1.0):
     samples, *_ = sk_datasets.make_s_curve(batch_size, noise=(noise or 0))
     samples[:, 2] /= 2 
     samples = torch.from_numpy(samples[:, [0, 2]]) + (shift if shift is not None else 0)
-    return samples.float()
+    return samples.float() * scale
 
 
 @registry.add(name='swiss_roll')
-def swiss_roll(batch_size, shift=None, noise=None):
+def swiss_roll(batch_size, shift=None, noise=None, scale: float = 1.0):
     samples, _ = sk_datasets.make_swiss_roll(batch_size, noise=(noise or 0))
     samples = samples * 8 / 7  - 1 / 7
     samples = torch.from_numpy(samples[:, [0, 2]]) / 15 + (shift if shift is not None else 0)
-    return samples.float()
+    return samples.float() * scale
 
 
 @registry.add(name='checkboard')
-def checkboard(batch_size, shift=None):
+def checkboard(batch_size, shift=None, scale: float = 1.0):
     samples = torch.rand(batch_size * 3, 2) * 2 + torch.tensor([[-1, -1]])
 
     x_mask = (samples[:, 0] > 0.5) + (0 > samples[:, 0]) * (samples[:, 0] > -0.5)
@@ -123,7 +133,8 @@ def checkboard(batch_size, shift=None):
 
     mask = x_mask ^ y_mask
     samples = samples[mask][:batch_size] + (shift if shift is not None else 0)
-    return samples.float()
+    return samples.float() * scale
+
 
 class GaussMix:
     def __init__(self, means, sigmas):

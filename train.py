@@ -4,7 +4,7 @@ import hydra
 import omegaconf
 
 from samplers import SBConfig, D2DSB, D2ESB, D2ESBConfig
-from model import SimpleNet
+from models.model import SimpleNet
 
 from data import datasets
 
