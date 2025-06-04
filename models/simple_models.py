@@ -117,7 +117,7 @@ class Energy(Module):
         self.proj_out = nn.Linear(hidden_dim, out_dim)
         
         self.body = nn.Sequential(
-            *[Block(hidden_dim, use_ln, block_type=="res") 
+            *[Block(hidden_dim, hidden_dim, use_ln, block_type=="res") 
               for _ in range(n_blocks)]
         )
 
