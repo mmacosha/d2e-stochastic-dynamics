@@ -50,7 +50,7 @@ data:
     name: mnist_reward
     args: 
       reward_num: 5
-      reward_ckpt: /Users/ktamogashev/Documents/PhD/projects/sb/assets/checkpoints/vae/reward.pth
+      reward_ckpt: /Users/ktamogashev/Documents/PhD/projects/sb/vae/reward.pth
 
 models:
   fwd:
