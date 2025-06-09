@@ -135,13 +135,12 @@ class D2ESB(base_class.SB):
         # figure = utils.plot_trajectory(trajectory, timesteps, 
         #                                title=f"Forward Process, step={sb_iter}")
 
-        x_0 = self.p0.sample(self.config.batch_size // 4).to(self.config.device)
+        x_0 = self.p0.sample(self.config.val_batch_size).to(self.config.device)
         elbo, iw_1, iw_2 = metrics.compute_elbo(self.fwd_model, self.bwd_model, 
                                                 self.p1.log_density, x_0, dt, t_max, 
                                                 n_steps, n_traj=16)
 
-        x_0 = self.p0.sample(36).to(self.config.device)
-        img_base = self.p1.reward.decoder(x_0).cpu()
+        img_base = self.p1.reward.decoder(x_0[:36]).cpu()
         img_base = make_grid(
             img_base.view(-1, 1, 28, 28).repeat(1, 3, 1, 1), 
             nrow=6, normalize=True
@@ -149,6 +148,8 @@ class D2ESB(base_class.SB):
         
         x1_pred = sutils.sample_trajectory(self.fwd_model, x_0, 'forward', 
                                            dt, n_steps, t_max, only_last=True)
+
+        mean_reward = self.p1.reward(x1_pred).mean(dim=0)
         img_pred = self.p1.reward.decoder(x1_pred).cpu()
         img_pred = make_grid(
             img_pred.view(-1, 1, 28, 28).repeat(1, 3, 1, 1), 
@@ -163,6 +164,7 @@ class D2ESB(base_class.SB):
             "images/x1-sample": wandb.Image(img_pred), 
             "sb_iter": sb_iter,
             "metrics/p1_elbo": elbo, 
+            "metrics/mean_reward": mean_reward,
             "metrics/p1_iw_1": iw_1, 
             "metrics/p1_iw_2": iw_2,
             # "metrics/w2_dist": w2_dist,

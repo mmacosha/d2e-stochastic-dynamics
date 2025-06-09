@@ -22,6 +22,7 @@ sampler:
   n_steps: 20
 
   batch_size: 512
+  val_batch_size: 1024
 
   n_trajectories: 2
   drift_reg_coeff: 0.0
