@@ -1,16 +1,23 @@
 import os
 
-import hydra
+import click
 import omegaconf
+from hydra import initialize, compose
 
 from samplers import SBConfig, D2DSB, D2ESB, D2ESBConfig
-from models.model import SimpleNet
+from models.simple_models import SimpleNet
 
 from data import datasets
 
 
-@hydra.main(version_base=None, config_path="./configs",  config_name="config")
-def run(config: omegaconf.DictConfig):
+@click.command()
+@click.option('--base_cfg_path', 'base_cfg_path', 
+              type=click.Path(exists=True), default='configs')
+@click.option("--cfg", 'cfg', type=click.STRING, default='config')
+def run(base_cfg_path: str, cfg: str):
+    with initialize(version_base=None, config_path=base_cfg_path):
+        config = compose(config_name=cfg, overrides=[])
+    
     p0 = datasets[config.data.p_0.name](**config.data.p_0.args)
     p1 = datasets[config.data.p_1.name](**config.data.p_1.args)
 

@@ -4,6 +4,7 @@ import torch
 import wandb
 from tqdm.auto import trange
 import matplotlib.pyplot as plt
+from torchvision.utils import make_grid
 
 import utils
 import metrics
@@ -84,7 +85,8 @@ class D2ESB(base_class.SB):
                                                        t_max, n_steps, 
                                                        p1_buffer=self.p1_buffer,
                                                        n_trajectories=n_trajectories,
-                                                       reg_coeff=drift_reg_coeff)
+                                                    #    reg_coeff=drift_reg_coeff
+                                                       )
 
             elif self.config.reuse_backward_trajectory:
                 raise ValueError('This part of code is under rewriting. DO NOT USE!')
@@ -105,7 +107,8 @@ class D2ESB(base_class.SB):
                                                        t_max, n_steps, 
                                                        p1_buffer=self.p1_buffer,
                                                        n_trajectories=n_trajectories,
-                                                       reg_coeff=drift_reg_coeff)
+                                                    #    reg_coeff=drift_reg_coeff
+                                                       )
             
             loss.backward()
             self.fwd_optim.step()
@@ -122,36 +125,53 @@ class D2ESB(base_class.SB):
         t_max = self.config.t_max
         n_steps = self.config.n_steps
 
-        x_0 = self.p0.sample(self.config.batch_size).to(self.config.device)
-        trajectory, timesteps = sutils.sample_trajectory(self.fwd_model, x_0, "forward", 
-                                                        dt, n_steps, t_max, 
-                                                        return_timesteps=True)
+        # x_0 = self.p0.sample(self.config.batch_size).to(self.config.device)
+        # trajectory, timesteps = sutils.sample_trajectory(self.fwd_model, x_0, "forward", 
+        #                                                 dt, n_steps, t_max, 
+        #                                                 only_last=True,
+        #                                                 return_timesteps=False)
 
-        trajectory = [tensor.cpu() for tensor in trajectory]
-        figure = utils.plot_trajectory(trajectory, timesteps, 
-                                       title=f"Forward Process, step={sb_iter}")
+        # trajectory = [tensor.cpu() for tensor in trajectory]
+        # figure = utils.plot_trajectory(trajectory, timesteps, 
+        #                                title=f"Forward Process, step={sb_iter}")
 
         x_0 = self.p0.sample(self.config.batch_size // 4).to(self.config.device)
         elbo, iw_1, iw_2 = metrics.compute_elbo(self.fwd_model, self.bwd_model, 
                                                 self.p1.log_density, x_0, dt, t_max, 
                                                 n_steps, n_traj=16)
 
-        x_0 = self.p0.sample(self.config.batch_size // 4).to(self.config.device)
-        x_1_sampled = sutils.sample_trajectory(self.fwd_model, x_0, 'forward', 
-                                               dt, n_steps, t_max, only_last=True)
+        x_0 = self.p0.sample(36).to(self.config.device)
+        img_base = self.p1.reward.decoder(x_0).cpu()
+        img_base = make_grid(
+            img_base.view(-1, 1, 28, 28).repeat(1, 3, 1, 1), 
+            nrow=6, normalize=True
+        )[0]
+        
+        x1_pred = sutils.sample_trajectory(self.fwd_model, x_0, 'forward', 
+                                           dt, n_steps, t_max, only_last=True)
+        img_pred = self.p1.reward.decoder(x1_pred).cpu()
+        img_pred = make_grid(
+            img_pred.view(-1, 1, 28, 28).repeat(1, 3, 1, 1), 
+            nrow=6, normalize=True
+        )[0]
 
-        x_1_true = self.p1.sample(self.config.batch_size // 4)
-        w2_dist = metrics.compute_w2_distance(x_1_true, x_1_sampled)
+        # x_1_true = self.p1.sample(self.config.batch_size // 4)
+        # w2_dist = metrics.compute_w2_distance(x_1_true, x_1_sampled)
 
         run.log({
-            "images/forward_trajectory": wandb.Image(figure), "sb_iter": sb_iter,
-            "metrics/p1_elbo": elbo, "metrics/p1_iw_1": iw_1, "metrics/p1_iw_2": iw_2,
-            "metrics/w2_dist": w2_dist,
+            "images/x0_sample": wandb.Image(img_base),
+            "images/x1-sample": wandb.Image(img_pred), 
+            "sb_iter": sb_iter,
+            "metrics/p1_elbo": elbo, 
+            "metrics/p1_iw_1": iw_1, 
+            "metrics/p1_iw_2": iw_2,
+            # "metrics/w2_dist": w2_dist,
         })
-        plt.close(figure)
+        # plt.close(figure)
 
     @torch.no_grad()
     def log_backward_step(self, sb_iter, run):
+        return None
         dt = self.config.dt
         t_max = self.config.t_max
         n_steps = self.config.n_steps

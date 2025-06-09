@@ -29,6 +29,7 @@ class SimpleNet(Module):
             self, 
             x_emb_size: int, 
             in_dim: int = 2,
+            out_dim: int = 2,
             t_emb_size: int | None = None ,
             n_main_body_layers: int = 2,
             predict_log_var: bool = False,
@@ -71,10 +72,10 @@ class SimpleNet(Module):
             )
         self.main_body = nn.Sequential(*layers)
         
-        self.drift_head = nn.Linear(x_emb_size, 2)
+        self.drift_head = nn.Linear(x_emb_size, out_dim)
 
         if self.predict_log_var:
-            self.log_var_head = nn.Linear(x_emb_size, 2)
+            self.log_var_head = nn.Linear(x_emb_size, out_dim)
 
     def forward(self, x, t):
         if self.t_emb_size is None:

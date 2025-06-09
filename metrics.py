@@ -13,7 +13,7 @@ def log_mean_exp(x, dim: int | None = None):
 @torch.no_grad()
 def compute_elbo(fwd_model, bwd_model, log_p_1, x, dt, t_max, num_t_steps, n_traj):
     x = x.repeat(n_traj, 1)
-    log_diff, _ = losses.compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, 
+    log_diff = losses.compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p_1, 
                                                        x, dt, t_max, num_t_steps)
     elbo = (-log_diff).mean()
     log_diff = (-log_diff).reshape(-1, n_traj)

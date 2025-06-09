@@ -1,8 +1,14 @@
+import math
+
 import torch
 from torch import distributions 
 
 from . import base
 from . import datasets_fn_2d
+
+import sys
+sys.path.append('../vae')
+from vae.vae import Reward
 
 
 registry = base.DatasetRegistry()
@@ -106,3 +112,31 @@ class Checkboard(base.Dataset):
         def _iterator():
             yield self.fn(size, self.shift)
         return next(_iterator())
+
+
+@registry.add(name="simple_gaussian")
+class SimpleGaussian(base.Dataset):
+    def __init__(self, mean=0, std=1, dim=2, device='cpu'):
+        self.dim = dim
+        self.mean = torch.as_tensor(mean, device=device)
+        self.sigma = torch.as_tensor(std, device=device)
+        self.dist = distributions.Normal(self.mean, self.sigma)
+
+    def sample(self, size: int):
+        return self.dist.sample((size, self.dim))
+
+    def log_density(self, x):
+        return self.dist.log_prob(x)
+
+
+@registry.add(name="mnist_reward")
+class MNISTReward(base.Dataset):
+    def __init__(self, reward_num, reward_ckpt):
+        self.reward = Reward(reward_num, reward_ckpt)
+        self.log_prior = lambda x: - x.size(1) / 2 * math.log(2 * math.pi) - x.pow(2).sum(dim=1) / 2
+
+    def sample(self, size: int):
+        raise NotImplementedError
+
+    def log_density(self, x):
+        return self.log_prior(x) + torch.log(self.reward(x))

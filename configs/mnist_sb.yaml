@@ -1,0 +1,77 @@
+sampler:
+  name: d2e
+  device: cpu
+
+  # training parameters:
+  backward_first: true
+  fwd_optim_lr: 8e-4
+  bwd_optim_lr: 8e-4
+  save_checkpoint_freq: 5
+
+  threshold: 5e-6
+  n_sb_iter: 20
+  num_fwd_steps: 5000
+  num_bwd_steps: 5000
+  log_fwd_freq: 1
+  log_bwd_freq: 1
+
+  # process parameters:
+  alpha: 4.0
+  dt: 0.0006
+  t_max: 0.0012
+  n_steps: 20
+
+  batch_size: 512
+
+  n_trajectories: 2
+  drift_reg_coeff: 0.0
+  reuse_backward_trajectory: false
+
+  buffer_type: simple
+  buffer_size: 1024
+  langevin_step_size: 0.001
+  num_langevin_update_steps: 50
+
+exp:
+  id: null
+  resume: allow
+  name: outsourced-sb-mnist
+  project: sb
+  mode: online
+
+data:
+  p_0: 
+    name: simple_gaussian
+    args: 
+      mean: 0.0
+      std: 1.0
+      dim: 10
+  p_1:
+    name: mnist_reward
+    args: 
+      reward_num: 5
+      reward_ckpt: /Users/ktamogashev/Documents/PhD/projects/sb/assets/checkpoints/vae/reward.pth
+
+models:
+  fwd:
+    t_emb_size: 64
+    x_emb_size: 64
+    in_dim: 10
+    out_dim: 10
+    n_main_body_layers: 3
+    predict_log_var: true
+  bwd:
+    t_emb_size: 64
+    x_emb_size: 64
+    in_dim: 10
+    out_dim: 10
+    n_main_body_layers: 3
+    predict_log_var: true
+
+hydra:
+  run:
+    dir: "."
+  output_subdir: null
+  job_logging:
+    disable_existing_loggers: true
+  verbose: false
