@@ -46,11 +46,13 @@ data:
       mean: 0.0
       std: 1.0
       dim: 10
+      device: ${sampler.device}
   p_1:
     name: mnist_reward
     args: 
       reward_num: 5
       reward_ckpt: /Users/ktamogashev/Documents/PhD/projects/sb/vae/reward.pth
+      device: ${sampler.device}
 
 models:
   fwd:
