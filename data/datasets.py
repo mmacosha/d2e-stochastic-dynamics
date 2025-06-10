@@ -133,7 +133,9 @@ class SimpleGaussian(base.Dataset):
 class MNISTReward(base.Dataset):
     def __init__(self, reward_num, reward_ckpt, device='cpu'):
         self.reward = Reward(reward_num, reward_ckpt).to(device)
-        self.log_prior = lambda x: - x.size(1) / 2 * math.log(2 * math.pi) - x.pow(2).sum(dim=1) / 2
+        self.log_prior = lambda x: (
+            - x.size(1) / 2 * math.log(2 * math.pi) - x.pow(2).sum(dim=1) / 2
+        )
 
     def sample(self, size: int):
         raise NotImplementedError
