@@ -15,10 +15,10 @@ from data import datasets
               type=click.Path(exists=True), default='configs')
 @click.option("--cfg", 'cfg', type=click.STRING, default='config')
 @click.option("--overrides", 'overrides', type=click.STRING, default=None,)
-def run(base_cfg_path: str, cfg: str):
-    with initialize(version_base=None, config_path=base_cfg_path, overrides=None):
+def run(base_cfg_path: str, cfg: str, overrides=None):
+    with initialize(version_base=None, config_path=base_cfg_path):
         overrides = overrides.split(',') if overrides else []
-        config = compose(config_name=cfg, overrides=[])
+        config = compose(config_name=cfg, overrides=overrides)
     
     p0 = datasets[config.data.p_0.name](**config.data.p_0.args)
     p1 = datasets[config.data.p_1.name](**config.data.p_1.args)

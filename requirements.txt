@@ -3,3 +3,6 @@ matplotlib
 hydra-core
 scikit-learn
 POT
+omegaconf==2.3.0
+click
+tqdm

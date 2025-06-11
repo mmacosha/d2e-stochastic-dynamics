@@ -22,6 +22,7 @@ class D2ESBConfig(base_class.SBConfig):
     reuse_backward_trajectory: bool = True
     n_trajectories: int = 2
     buffer_type: str = 'simple'
+    val_batch_size: int = 1024
     buffer_size: int = 1024
     langevin_step_size: float = 0.001
     num_langevin_update_steps: int = 10
@@ -92,10 +93,10 @@ class D2ESB(base_class.SB):
                 raise ValueError('This part of code is under rewriting. DO NOT USE!')
                 x_1 = self.p1_buffer.sample(batch_size).to(device)
                 loss = losses.compute_fwd_ctb_loss_reuse_bwd(
-                                                        self.fwd_model, self.bwd_model,
-                                                        self.p1.log_density, x_1, dt, 
-                                                        t_max, n_steps, self.p1_buffer
-                                                    )
+                    self.fwd_model, self.bwd_model,
+                    self.p1.log_density, x_1, dt, 
+                    t_max, n_steps, self.p1_buffer
+                )
 
             else:
                 x_1 = self.p1_buffer.sample(batch_size // n_trajectories).to(device)
@@ -144,17 +145,17 @@ class D2ESB(base_class.SB):
         img_base = make_grid(
             img_base.view(-1, 1, 28, 28).repeat(1, 3, 1, 1), 
             nrow=6, normalize=True
-        )[0]
+        )[:1]
         
         x1_pred = sutils.sample_trajectory(self.fwd_model, x_0, 'forward', 
                                            dt, n_steps, t_max, only_last=True)
 
         mean_reward = self.p1.reward(x1_pred).mean(dim=0)
-        img_pred = self.p1.reward.decoder(x1_pred).cpu()
+        img_pred = self.p1.reward.decoder(x1_pred[:36]).cpu()
         img_pred = make_grid(
             img_pred.view(-1, 1, 28, 28).repeat(1, 3, 1, 1), 
             nrow=6, normalize=True
-        )[0]
+        )[:1]
 
         # x_1_true = self.p1.sample(self.config.batch_size // 4)
         # w2_dist = metrics.compute_w2_distance(x_1_true, x_1_sampled)

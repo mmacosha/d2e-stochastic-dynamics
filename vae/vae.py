@@ -80,9 +80,32 @@ class Classifier(nn.Module):
         return nn.functional.cross_entropy(logits, y)
     
 
+def dirichlet_reward(target_values, alpha=-0.5):
+    if target_values.shape[1] == 1:
+        return target_values.squeeze(1)
+
+    x = target_values / target_values.sum(dim=1, keepdim=True)
+    alphas = torch.ones_like(x) * alpha
+    return torch.prod(x ** alphas, dim=1)
+
+def max_reward(target_values):
+    return target_values.max(dim=1).values
+
+def sum_reward(target_values):
+    return target_values.sum(dim=1)
+
+REWARD_FUNCTIONS = {
+    'dirichlet': dirichlet_reward,
+    'max': max_reward,
+    'sum': sum_reward
+}
+
+
 class Reward(nn.Module):
-    def __init__(self, reward_num: int, ckpt: str = None):
+    def __init__(self, reward_num: tuple[int], reward_type: str, ckpt: str = None):
         super().__init__()
+        assert reward_type in {'sum', 'max', 'dirichlet'}
+        self.reward_fn = REWARD_FUNCTIONS[reward_type]
         self.reward_num = reward_num
         self.decoder = VAE().decoder
         self.cls = Classifier(784, 10)
@@ -107,5 +130,6 @@ class Reward(nn.Module):
         with torch.no_grad():
             x = self.decoder(z)
             probas = self.cls(x)
+            target_values = probas[:, y]
 
-        return probas[:, y]
+        return self.reward_fn(target_values)

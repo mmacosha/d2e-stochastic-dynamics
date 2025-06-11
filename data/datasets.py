@@ -131,8 +131,8 @@ class SimpleGaussian(base.Dataset):
 
 @registry.add(name="mnist_reward")
 class MNISTReward(base.Dataset):
-    def __init__(self, reward_num, reward_ckpt, device='cpu'):
-        self.reward = Reward(reward_num, reward_ckpt).to(device)
+    def __init__(self, reward_num, reward_ckpt, reward_type='sum', device='cpu'):
+        self.reward = Reward(reward_num, reward_type, reward_ckpt).to(device)
         self.log_prior = lambda x: (
             - x.size(1) / 2 * math.log(2 * math.pi) - x.pow(2).sum(dim=1) / 2
         )
