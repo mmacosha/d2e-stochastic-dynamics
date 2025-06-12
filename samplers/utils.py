@@ -1,5 +1,5 @@
 import torch
-from models.utils import ModelOutput
+from models import utils
 
 
 def extract_into_tensor(tensor, shape):
@@ -63,7 +63,7 @@ class ReferenceProcess:
         self.gamma = gamma
     
     def __call__(self, x, t):
-        return ModelOutput(drift=-self.alpha * self.gamma * x)
+        return utils.ModelOutput(drift=-self.alpha * self.gamma * x)
     
 
 class ReferenceProcess2:
@@ -71,4 +71,4 @@ class ReferenceProcess2:
         self.alpha = alpha
     
     def __call__(self, x, t):
-        return ModelOutput(drift= - self.alpha * x)
+        return utils.ModelOutput(drift= - self.alpha * x)

@@ -1,6 +1,6 @@
 sampler:
   name: d2e
-  device: cpu
+  device: cuda:0
 
   # training parameters:
   backward_first: true
@@ -51,8 +51,8 @@ data:
   p_1:
     name: mnist_reward
     args: 
-      reward_num: [0, 2, 4, 6, 8]
-      reward_type: sum
+      reward_num: [3, 4, 5]
+      reward_type: dirichlet
       reward_ckpt: ./vae/reward.pth
       device: ${sampler.device}
 

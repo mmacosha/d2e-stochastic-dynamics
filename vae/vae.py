@@ -80,13 +80,18 @@ class Classifier(nn.Module):
         return nn.functional.cross_entropy(logits, y)
     
 
-def dirichlet_reward(target_values, alpha=-0.5):
+def dirichlet_reward(
+        target_values: torch.Tensor, 
+        alpha=-0.01, 
+        max_reward: float = 5.0
+    ):
     if target_values.shape[1] == 1:
         return target_values.squeeze(1)
 
     x = target_values / target_values.sum(dim=1, keepdim=True)
     alphas = torch.ones_like(x) * alpha
-    return torch.prod(x ** alphas, dim=1)
+    
+    return torch.minimum(x ** alphas, torch.as_tensor(max_reward)).prod(dim=1)
 
 def max_reward(target_values):
     return target_values.max(dim=1).values

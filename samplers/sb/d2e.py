@@ -150,7 +150,7 @@ class D2ESB(base_class.SB):
         x1_pred = sutils.sample_trajectory(self.fwd_model, x_0, 'forward', 
                                            dt, n_steps, t_max, only_last=True)
 
-        mean_reward = self.p1.reward(x1_pred).mean(dim=0)
+        mean_reward = self.p1.reward(x1_pred).log().mean(dim=0)
         img_pred = self.p1.reward.decoder(x1_pred[:36]).cpu()
         img_pred = make_grid(
             img_pred.view(-1, 1, 28, 28).repeat(1, 3, 1, 1), 
