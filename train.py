@@ -1,13 +1,9 @@
-import os
-
 import click
-import omegaconf
 from hydra import initialize, compose
 
-from samplers import SBConfig, D2DSB, D2ESB, D2ESBConfig
-from models.simple_models import SimpleNet
-
-from data import datasets
+from sb.data import datasets
+from sb.nn.mlp import SimpleNet
+from sb.samplers import SBConfig, D2DSB, D2ESB, D2ESBConfig
 
 
 @click.command()

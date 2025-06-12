@@ -1,0 +1,10 @@
+project: mnist_reward
+name: mnist_vae_for_reward
+mode: online
+reward_type: vae
+
+vae:
+  batch_size:
+
+cls:
+  batch_size:

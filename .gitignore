@@ -1,15 +1,10 @@
-# System and IDE files
-.DS_Store
-.idea/
-.vscode/
-**/.ipynb_checkpoints/
 **/__pycache__
+**/DC_Store
+**/.ipynb_checkpoints
 
-# exp tracking
+ebm/
 wandb/
-outputs/
-
-# folders with images, data and checkpoints
-datasets
-figures
-checkpoints
+data/
+reward_ckpt/
+external/
+reward_ckpt/

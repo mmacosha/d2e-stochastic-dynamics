@@ -49,11 +49,14 @@ data:
       dim: 10
       device: ${sampler.device}
   p_1:
-    name: mnist_reward
+    name: cls_reward_dist
     args: 
-      reward_num: [3, 4, 5]
-      reward_type: dirichlet
-      reward_ckpt: ./vae/reward.pth
+      generator_type: mnist_vae
+      classifier_type: mnist_cls
+      reward_ckpt: ./reward_ckpt/mnist_reward.pth
+      prior_dim: 10
+      target_classes: [3, 4, 5]
+      reward_type: max
       device: ${sampler.device}
 
 models:
