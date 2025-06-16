@@ -1,10 +1,9 @@
-**/__pycache__
 **/DC_Store
+**/__pycache__
 **/.ipynb_checkpoints
 
 ebm/
-wandb/
 data/
-reward_ckpt/
+wandb/
 external/
-reward_ckpt/
+rewards/

@@ -87,7 +87,7 @@ class VarCriterion:
 
 
 def plot_annotated_images(batch, classes_probas, n_col=8, figsize=(12, 6)):
-    classes, probas = classes_probas
+    probas, classes = classes_probas
     f, ax = plt.subplots(batch.size(0) // n_col, n_col, figsize=figsize)
     for i in range(batch.size(0)):
         row, col = divmod(i, n_col)
