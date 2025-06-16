@@ -14,7 +14,7 @@ from sb.samplers.utils import ReferenceProcess2
 
 @dataclass
 class SBConfig:
-    name: str | None = None 
+    name: str  = None 
     device: str = "cpu"
     backward_first: bool = False
     n_sb_iter: int = 10
@@ -40,7 +40,7 @@ class SBConfig:
         assert self.dt * self.n_steps == self.t_max
 
 
-def find_checkpoint(directory: str, checkpoint_num: int) -> str | None:
+def find_checkpoint(directory: str, checkpoint_num: int) -> str :
     """
     Get the checkpoint file from the given directory.
     If checkpoint_num is -1, return the last checkpoint.
@@ -133,7 +133,7 @@ class SB(ABC):
             self.save_checkpoint("final", run)
     
     
-    def save_checkpoint(self, sb_iter: str | int, run):
+    def save_checkpoint(self, sb_iter: str , run):
         checkpoint_path = Path(run.dir) / 'checkpoints'
         checkpoint_path.mkdir(exist_ok=True)
 

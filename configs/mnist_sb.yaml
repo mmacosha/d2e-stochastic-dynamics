@@ -15,19 +15,21 @@ sampler:
   log_fwd_freq: 1
   log_bwd_freq: 1
 
-  # process parameters:
   alpha: 0.0
   dt: 0.004
   t_max: 0.08
   n_steps: 20
 
-  batch_size: 512
-  val_batch_size: 1024
+  batch_size: 64
+  val_batch_size: 128
 
   n_trajectories: 2
   drift_reg_coeff: 0.0
   reuse_backward_trajectory: false
 
+  policy: mixed
+  off_policy_fraction: 0.25
+  start_mixed_from: 0
   buffer_type: simple
   buffer_size: 1024
   langevin_step_size: 0.001
@@ -46,34 +48,35 @@ data:
     args: 
       mean: 0.0
       std: 1.0
-      dim: 10
+      dim: 50
       device: ${sampler.device}
   p_1:
     name: cls_reward_dist
     args: 
-      generator_type: mnist_vae
-      classifier_type: mnist_cls
-      reward_ckpt: ./reward_ckpt/mnist_reward.pth
-      prior_dim: 10
-      target_classes: [3, 4, 5]
-      reward_type: max
+      generator_type: cifar-gan-z50
+      classifier_type: cifar_cls
+      prior_dim: 50
+      target_classes: [5]
+      reward_type: sum
       device: ${sampler.device}
 
 models:
   fwd:
     t_emb_size: 64
     x_emb_size: 64
-    in_dim: 10
-    out_dim: 10
-    n_main_body_layers: 3
+    in_dim: 50
+    out_dim: 50
+    n_main_body_layers: 5
     predict_log_var: true
+    use_residual: false
   bwd:
     t_emb_size: 64
     x_emb_size: 64
-    in_dim: 10
-    out_dim: 10
-    n_main_body_layers: 3
+    in_dim: 50
+    out_dim: 50
+    n_main_body_layers: 5
     predict_log_var: true
+    use_residual: false
 
 hydra:
   run:

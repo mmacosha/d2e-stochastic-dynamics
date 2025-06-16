@@ -1,47 +1,69 @@
+import torch
 import torch.nn as nn
 
 
 class CifarGen(nn.Module):
-    def __init__(self, latent_dim: int = 100, channels: int = 3):
-        super().__init__()
+    def __init__(self, z_dim, ngf, inference: bool = False):
+        super().__init__()  
+        self.z_dim = z_dim
+        self.ngf = ngf  
+        self.inference = inference
         self.main = nn.Sequential(
-            nn.ConvTranspose2d(latent_dim, 32, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(32),
+            nn.ConvTranspose2d(z_dim, ngf * 4, 4, 1, 0, bias=False),
+            nn.BatchNorm2d(ngf * 4),
             nn.ReLU(True),
             
-            nn.ConvTranspose2d(32, 16, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(16),
+            nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf * 2),
             nn.ReLU(True),
             
-            nn.ConvTranspose2d(16, 8, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(8),
+            nn.ConvTranspose2d( ngf * 2, ngf, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf),
             nn.ReLU(True),
             
-            nn.ConvTranspose2d(8, channels, 4, 2, 1, bias=False),
+            nn.ConvTranspose2d( ngf, 3, 4, 2, 1, bias=False),
             nn.Tanh()
         )
 
-    def forward(self, x):
-        return self.main(x)
+    def forward(self, z):
+        if z.ndim == 2:
+            z = z[..., None, None]
+        
+        img = self.main(z)
+
+        if self.inference:
+            return (img / 2 + 0.5).clip(0, 1)
+        return img
+
+    @torch.no_grad()
+    def generate(self, z):
+        img = self(z)
+        return (img / 2 + 0.5).clip(0, 1)
+    
+    def save_model(self, path):
+        ckpt = {
+            "config": {"z_dim": self.z_dim, "ngf": self.nfg},
+            "state_dict": self.state_dict()
+        }
+        torch.save(ckpt, path)
 
 
 class CifarDisc(nn.Module):
     def __init__(self, channels: int = 3, sigmoid: bool = False):
         super().__init__()
-        ch = 32
         self.main = nn.Sequential(
-            nn.Conv2d(channels, ch, 4, 2, 1, bias=False),
+            nn.Conv2d(channels, 64, 4, 2, 1, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
 
-            nn.Conv2d(ch, ch * 2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ch * 2),
+            nn.Conv2d(64, 128, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(128),
             nn.LeakyReLU(0.2, inplace=True),
 
-            nn.Conv2d(ch * 2, ch * 4, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ch * 4),
+            nn.Conv2d(128, 256, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(256),
             nn.LeakyReLU(0.2, inplace=True),
     
-            nn.Conv2d(ch * 4, 1, 4, 1, 0, bias=False),
+            nn.Conv2d(256, 1, 4, 1, 0, bias=False),
             nn.Sigmoid() if sigmoid else nn.Identity()
         )
 

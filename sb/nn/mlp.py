@@ -11,9 +11,10 @@ class SimpleNet(Module):
             x_emb_size: int, 
             in_dim: int = 2,
             out_dim: int = 2,
-            t_emb_size: int | None = None ,
+            t_emb_size: int = None ,
             n_main_body_layers: int = 2,
             predict_log_var: bool = False,
+            use_residual: bool = False
         ):
         super().__init__(
             x_emb_size=x_emb_size,
@@ -29,7 +30,7 @@ class SimpleNet(Module):
         self.x_embed = Block(
             in_dim, x_emb_size, 
             use_ln=True, 
-            skip_connection=False
+            skip_connection=use_residual
         )
         
         combined_hidden_size = x_emb_size
@@ -38,7 +39,7 @@ class SimpleNet(Module):
             self.t_embed = Block(
                 t_emb_size, x_emb_size,
                 use_ln=True,
-                skip_connection=False)
+                skip_connection=use_residual)
             combined_hidden_size += x_emb_size
 
         layers = []
@@ -48,7 +49,7 @@ class SimpleNet(Module):
                     combined_hidden_size if i == 0 else x_emb_size,
                     x_emb_size,
                     use_ln=True,
-                    skip_connection=False
+                    skip_connection=use_residual
                 )
             )
         self.main_body = nn.Sequential(*layers)

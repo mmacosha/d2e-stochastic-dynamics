@@ -4,6 +4,12 @@ from torch import nn
 from sb.nn.cifar import CifarVAE, CifarGen, CifarCls
 from sb.nn.mnist import MnistVAE, MnistCLS
 
+import sys
+sys.path.append("./external/stylegan3")
+
+import dnnlib
+import legacy
+
 
 def dirichlet_reward(
         target_values: torch.Tensor, 
@@ -33,6 +39,21 @@ REWARD_FUNCTIONS = {
     'sum': sum_reward
 }
 
+class CifarStyleGAN3(nn.Module):
+    network_pkl = './reward_ckpt/stylegan2-cifar10-32x32.pkl'
+    def __init__(self):
+        super().__init__()
+        with dnnlib.util.open_url(self.network_pkl) as f:
+            self.G = legacy.load_network_pkl(f)['G_ema'] #.to(device)
+            self.G.eval()
+    
+    def forward(self, latents):
+        with torch.no_grad():
+            c = torch.zeros((latents.shape[0], self.G.c_dim), device=latents.device)
+            x = self.G(latents, c, noise_mode='const')
+            x = (x + 1) / 2
+        return x.clip(0, 1)
+
 
 class ClsReward(nn.Module): 
     def __init__(self, generator, classifier, target_classes, reward_type='sum'):
@@ -47,14 +68,18 @@ class ClsReward(nn.Module):
         self.target_classes = target_classes
         self.generator = generator
         self.classifier = classifier
+        self.eval()
 
     def forward(self, latents):
         with torch.no_grad():
             x_pred = self.generator(latents)
             logits = self.classifier(x_pred)
         
-        probas = logits.softmax(dim=1)[:, self.target_classes]
-        return self.reward_fn(probas)
+        probas = logits.softmax(dim=1)
+        rewards = probas[:, self.target_classes]
+        
+        reward = self.reward_fn(rewards)
+        return reward
 
     def state_dict(self):
         return {
@@ -69,26 +94,42 @@ class ClsReward(nn.Module):
     @classmethod
     def build_reward(
         cls, generator_type: str, classifier_type: str, 
-        target_classes, reward_type='sum', checkpoint_path=None):
-        if generator_type == 'cifar_vae':
-            generator = CifarVAE().decoder
-        elif generator_type == 'cifar_gen':
-            generator = CifarGen()
+        target_classes, reward_type='sum'):        
+        if generator_type == 'cifar_stylegan':
+            generator = CifarStyleGAN3()
+        
         elif generator_type == 'mnist_vae':
             generator = MnistVAE().decoder
+            ckpt = torch.load('./rewards/mnist/mnist_reward.pth', 
+                              map_location='cpu', weights_only=True)
+            generator.load_state_dict(ckpt['decoder'])
+
+        elif generator_type in {'cifar-gan-z50', 'cifar-gan-z100', 'cifar-gan-z256'}:
+            ckpt_path = f'./rewards/cifar/{generator_type}.pt'
+            ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=True)
+            generator = CifarGen(**ckpt['config'], inference=True)
+            generator.load_state_dict(ckpt['state_dict'])
+            generator.eval()
+        
         else:
             raise NotImplemented(f"Unknown generator type: {generator_type}")
 
         if classifier_type == 'cifar_cls':
             classifier = CifarCls()
+            ckpt = torch.load('./rewards/cifar/cifar_cls.pt', 
+                              map_location='cpu', weights_only=True)
+            classifier.load_state_dict(ckpt)
+        
         elif classifier_type == 'mnist_cls':
             classifier = MnistCLS()
+            ckpt = torch.load('./rewards/mnist/mnist_reward.pth', 
+                              map_location='cpu', weights_only=True)
+            generator.load_state_dict(ckpt['cls'])
+        
         else:
             raise NotImplemented(f"Unknown classifier type: {classifier_type}")
         
-        reward = cls(generator, classifier, target_classes, reward_type)
-        if checkpoint_path is not None:
-            ckpt = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
-            reward.load_state_dict(ckpt)
-
-        return reward
+        generator.eval()
+        classifier.eval()
+        
+        return cls(generator, classifier, target_classes, reward_type)

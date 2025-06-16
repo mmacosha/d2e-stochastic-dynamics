@@ -7,14 +7,30 @@ from sb.samplers import SBConfig, D2DSB, D2ESB, D2ESBConfig
 
 
 @click.command()
-@click.option('--base_cfg_path', 'base_cfg_path', 
-              type=click.Path(exists=True), default='configs')
+@click.option('--cfg_path', 'cfg_path', type=click.Path(exists=True), default='configs')
 @click.option("--cfg", 'cfg', type=click.STRING, default='config')
+@click.option("--name", 'name', type=click.STRING, default=None)
+@click.option("--wandb", 'wandb', type=click.STRING, default='online')
+@click.option("--device", 'device', type=click.INT, default=0)
+@click.option("--debug", 'debug', type=click.BOOL, default=False, is_flag=True)
 @click.option("--overrides", 'overrides', type=click.STRING, default=None,)
-def run(base_cfg_path: str, cfg: str, overrides=None):
-    with initialize(version_base=None, config_path=base_cfg_path):
+def run(cfg_path: str, cfg: str, name: str, wandb: str, 
+        device: int, debug: bool, overrides=None):
+    with initialize(version_base=None, config_path=cfg_path):
         overrides = overrides.split(',') if overrides else []
         config = compose(config_name=cfg, overrides=overrides)
+        if debug:
+            print("\nATTENTION: DEBUG MODE IS ON!\n")
+            config.exp.mode = 'disabled'
+            config.exp.name = f'debug-run-{config.exp.name}'
+            config.sampler.num_fwd_steps=10
+            config.sampler.num_bwd_steps=10
+            config.sampler.n_sb_iter = 2
+        else:
+            config.exp.mode = wandb
+            config.exp.name = name if name else config.exp.name
+        
+        config.sampler.device = f"cuda:{device}"
     
     p0 = datasets[config.data.p_0.name](**config.data.p_0.args)
     p1 = datasets[config.data.p_1.name](**config.data.p_1.args)

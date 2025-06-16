@@ -1,7 +1,7 @@
-mode: offline
+mode: online
 project: cifar10-vae
-name: vae-training
-device: cuda:1
+name: cifar10-gan-base-run
+device: cuda:0
 model_type: gan
 data_root: ./data
 
@@ -14,11 +14,11 @@ gan:
   n_steps: 50001
   latent_dim: 512
   
-  glr: 1e-5
+  glr: 2e-4
   gbetas: [0.5, 0.999]
   gdecay: 1e-5
   
-  dlr: 1e-2
+  dlr: 2e-4
   dbetas: [0.5, 0.999]
   ddecay: 1e-5
 

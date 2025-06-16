@@ -169,7 +169,7 @@ def run_gan_training(cfg):
     fixed_noise = torch.randn(64, cfg.latent_dim, 1, 1, device=cfg.device)
 
     for step in trange(cfg.n_steps):
-        for _ in range(20):
+        for _ in range(1):
             images, _ = next(train_loader)
             batch_size = images.size(0)
             real_images = images.to(cfg.device)
@@ -270,11 +270,12 @@ def run_cls_training(cfg):
     run_dir = Path(wandb.run.dir)
     wandb.watch(model, log="all", log_freq=100)
 
-    for epoch in range(1, cfg.n_epochs + 1):
+    for epoch in trange(1, cfg.n_epochs + 1, leave=False, 
+                        desc='Training', unit='epoch'):
+        model.train()
         train_acc, test_acc = 0, 0
         train_loss, test_loss = 0, 0
-        for batch in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{cfg.n_epochs}",
-                          leave=False, unit="batch"):
+        for batch in train_loader:
             data, target = (t.to(cfg.device) for t in batch)
 
             optimizer.zero_grad()
@@ -287,6 +288,7 @@ def run_cls_training(cfg):
             train_acc += (output.argmax(dim=1) == target).sum().item()
 
         with torch.no_grad():
+            model.eval()
             for test_batch in test_loader:
                 data, target = (t.to(cfg.device) for t in test_batch)
 
@@ -326,7 +328,7 @@ def train_cifar_model(cfg):
         wandb.init(project=cfg.project, name=cfg.name, mode=cfg.mode,
                    config=OmegaConf.to_container(cfg.vae, resolve=True))
         run_vae_training(cfg.vae)
-    elif cfg.model_type == 'classifier':
+    elif cfg.model_type == 'cls':
         wandb.init(project=cfg.project, name=cfg.name, mode=cfg.mode,
                    config=OmegaConf.to_container(cfg.cls, resolve=True))
         run_cls_training(cfg.cls)

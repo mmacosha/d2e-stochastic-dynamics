@@ -84,10 +84,24 @@ class VarCriterion:
             return True
         
         return np.var(self.loss[-self.measure_size:]) > self.threshold
-    
 
-def plot_trajectory(trajectory, timesteps, indices: None | list = None, 
-                    title: str | None = None, limits=(-5, 5)):
+
+def plot_annotated_images(batch, classes_probas, n_col=8, figsize=(12, 6)):
+    classes, probas = classes_probas
+    f, ax = plt.subplots(batch.size(0) // n_col, n_col, figsize=figsize)
+    for i in range(batch.size(0)):
+        row, col = divmod(i, n_col)
+        ax[row, col].imshow(batch[i].permute(1, 2, 0).cpu().numpy())
+        ax[row, col].axis('off')
+        ax[row, col].set_title(
+            f"Class `{classes[i]}`; proba={probas[i]:.2f}"
+        )
+    plt.tight_layout()
+    return f
+
+
+def plot_trajectory(trajectory, timesteps, indices: list = None, 
+                    title: str = None, limits=(-5, 5)):
     if indices is not None:
         trajectory = [trajectory[i] for i in indices]
         timesteps = [timesteps[i] for i in indices]
@@ -108,6 +122,7 @@ def plot_trajectory(trajectory, timesteps, indices: None | list = None,
         axes[i].set_ylim(*limits)
     
     return figure
+
 
 def plot_graph(graph):
     figure = plt.figure(figsize=(5, 3))
