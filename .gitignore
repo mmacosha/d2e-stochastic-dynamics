@@ -1,9 +1,15 @@
-**/DC_Store
+**/.idea
+**/.vscode
+**/.DS_Store
 **/__pycache__
 **/.ipynb_checkpoints
 
+vae/
 ebm/
 data/
 wandb/
-external/
+assets/
+outputs/
 rewards/
+sb-ebm/
+external/
