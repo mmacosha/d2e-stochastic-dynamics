@@ -71,41 +71,6 @@ class EMA:
         self.backup = {}
 
 
-class EMALoss:
-    def __init__(self, alpha=0.1):
-        self.ema = []
-        self.loss = []
-        self.alpha = alpha
-
-    def update(self, loss_value):
-        self.loss.append(loss_value)
-        if not self.ema:
-            self.ema.append(loss_value)
-        else:
-            self.ema.append(loss_value * self.alpha + self.ema[-1] * (1 - self.alpha))
-
-
-class VarCriterion:
-    def __init__(self, loss, threshold=0.001, measure_size: int = 10, max_iter=1000):
-        self.loss = loss
-        self.threshold = threshold
-        self.measure_size = measure_size
-        
-        self.max_iter = max_iter
-        self.curr_iter = 0
-
-    def check(self):
-        self.curr_iter += 1
-        
-        if self.curr_iter > self.max_iter:
-            return False
-        
-        if len(self.loss) < self.measure_size:
-            return True
-        
-        return np.var(self.loss[-self.measure_size:]) > self.threshold
-
-
 def plot_annotated_images(batch, classes_probas, n_col=8, figsize=(12, 6)):
     probas, classes = classes_probas
     f, ax = plt.subplots(batch.size(0) // n_col, n_col, figsize=figsize)

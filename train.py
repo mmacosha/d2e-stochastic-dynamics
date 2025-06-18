@@ -31,6 +31,12 @@ def run(cfg_path: str, cfg: str, name: str, wandb: str,
             config.exp.name = name if name else config.exp.name
         
         config.sampler.device = f"cuda:{device}"
+
+    if config.sampler.matching_method in {"score", "mean"} and \
+       (config.models.fwd.predict_log_var or config.models.bwd.predict_log_var):
+        raise ValueError(
+            "Matching method 'score' and 'mean' do not support tainable variance."
+        )
     
     p0 = datasets[config.data.p_0.name](**config.data.p_0.args)
     p1 = datasets[config.data.p_1.name](**config.data.p_1.args)

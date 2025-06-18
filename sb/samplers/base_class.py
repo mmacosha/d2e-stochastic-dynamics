@@ -22,6 +22,8 @@ class SBConfig:
     num_bwd_steps: int = 6000
     threshold: float = 1e-9
 
+    matching_method: str = "mean"
+
     fwd_ema_decay: float = 0.999
     bwd_ema_decay: float = 0.999
     fwd_optim_lr: int = 1e-3
@@ -41,6 +43,10 @@ class SBConfig:
     def __post__init__(self):
         assert self.dt * self.n_steps == self.t_max
 
+        assert self.matching_method in {"mean", "score", "ll"}, \
+            f"Unknown matching method: {self.matching_method}. " \
+            f"Available methods: mean, score, ll."
+        
 
 def find_checkpoint(directory: str, checkpoint_num: int) -> str :
     """
