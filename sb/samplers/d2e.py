@@ -62,6 +62,7 @@ class D2ESB(base_class.SB):
         t_max = self.config.t_max
         n_steps = self.config.n_steps
 
+        self.fwd_model_ema.apply()
         for step_iter in trange(self.config.num_bwd_steps, leave=False, 
                                 desc=f'It {sb_iter} | Backward'):
             self.bwd_optim.zero_grad(set_to_none=True)
@@ -72,11 +73,13 @@ class D2ESB(base_class.SB):
                                                x0, dt, t_max, n_steps)
                 
             self.bwd_optim.step()
-            self.bwd_ema_loss.update(loss.item() / n_steps)
+            self.bwd_model_ema.update()
             run.log({
                 "train/backward_loss": loss / n_steps,
                 "bwd_step": sb_iter * self.config.num_bwd_steps + step_iter
             })
+        
+        self.fwd_model_ema.restore()
                     
     def train_forward_step(self, sb_iter, run):
         dt = self.config.dt
@@ -87,6 +90,7 @@ class D2ESB(base_class.SB):
         batch_size = self.config.batch_size
         n_trajectories = self.config.n_trajectories
 
+        self.bwd_model_ema.apply()
         for step_iter in trange(self.config.num_fwd_steps, 
                                 leave=False, desc=f'It {sb_iter} | Forward'):
             self.fwd_optim.zero_grad(set_to_none=True)
@@ -100,15 +104,6 @@ class D2ESB(base_class.SB):
                                                        p1_buffer=self.p1_buffer,
                                                        n_trajectories=n_trajectories,
                                                        )
-
-            elif self.config.reuse_backward_trajectory:
-                raise ValueError('This part of code is under rewriting. DO NOT USE!')
-                x1 = self.p1_buffer.sample(batch_size).to(device)
-                loss = losses.compute_fwd_ctb_loss_reuse_bwd(
-                    self.fwd_model, self.bwd_model,
-                    self.p1.log_density, x1, dt, 
-                    t_max, n_steps, self.p1_buffer
-                )
 
             else:
                 current_policy = self.config.policy
@@ -152,13 +147,15 @@ class D2ESB(base_class.SB):
 
             loss.backward()
             self.fwd_optim.step()
+            self.fwd_model_ema.update()
 
-            self.fwd_ema_loss.update(loss.mean().item() / n_steps)
             run.log({
                 "train/forward_loss": loss / n_steps,
                 "metrics/mean_log_reward": log_reward,
                 "fwd_step": sb_iter * self.config.num_fwd_steps + step_iter
             })
+        
+        self.bwd_model_ema.restore()
 
     @torch.no_grad()
     def log_forward_step(self, sb_iter, run):
@@ -185,8 +182,12 @@ class D2ESB(base_class.SB):
         logits = self.p1.reward.classifier(pred_img[:36]).cpu()
         (p, c) = logits.softmax(dim=1).max(dim=1)
         
-        pred_img_grid = make_grid(pred_img.cpu().view(image_shape), nrow=6, normalize=True)
-        fig = utils.plot_annotated_images(pred_img, (p, c), n_col=6, figsize=(18, 18))
+        pred_img_grid = make_grid(
+            pred_img.cpu().view(image_shape), nrow=6, normalize=True
+        )
+        fig = utils.plot_annotated_images(
+            pred_img, (p, c), n_col=6, figsize=(18, 18)
+        )
         
         run.log({
             "images/x1_sample_annotated": wandb.Image(fig),

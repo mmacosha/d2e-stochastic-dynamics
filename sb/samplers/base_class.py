@@ -22,6 +22,8 @@ class SBConfig:
     num_bwd_steps: int = 6000
     threshold: float = 1e-9
 
+    fwd_ema_decay: float = 0.999
+    bwd_ema_decay: float = 0.999
     fwd_optim_lr: int = 1e-3
     bwd_optim_lr: int = 1e-3
     log_fwd_freq: int = 1
@@ -87,6 +89,9 @@ class SB(ABC):
         self.fwd_model = fwd_model
         self.bwd_model = bwd_model
 
+        self.fwd_model_ema = utils.EMA(self.fwd_model, self.config.fwd_ema_decay)
+        self.bwd_model_ema = utils.EMA(self.bwd_model, self.config.bwd_ema_decay)
+
         self.fwd_optim = torch.optim.AdamW(self.fwd_model.parameters(), 
                                            lr=self.config.fwd_optim_lr)
         self.bwd_optim = torch.optim.AdamW(self.bwd_model.parameters(), 
@@ -94,9 +99,6 @@ class SB(ABC):
 
         self.p0 = p0
         self.p1 = p1
-
-        self.fwd_ema_loss = utils.EMALoss(0.1)
-        self.bwd_ema_loss = utils.EMALoss(0.1)
 
         self.reference_process = ReferenceProcess2(self.config.alpha)
 

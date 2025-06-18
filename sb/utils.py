@@ -11,17 +11,30 @@ class EMA:
         self.decay = decay
         self.shadow = {}
         self.backup = {}
-        self.register()
+        self._register()
         
         self.curr_update = 0
         self.start_update = start_update
 
-    def register(self):
+    def _register(self):
+        if self.decay == 0.0:
+            return
+
         for name, param in self.model.named_parameters():
             if param.requires_grad:
                 self.shadow[name] = param.data.clone()
 
+    def clear(self):
+        if self.decay == 0.0:
+            return
+        self.shadow = {}
+        self.backup = {}
+        self.curr_update = 0
+        self._register()
+
     def update(self):
+        if self.decay == 0.0:
+            return
         self.curr_update += 1
         if self.curr_update < self.start_update:
             for name, param in self.model.named_parameters():
@@ -36,7 +49,10 @@ class EMA:
                 new_average = (1.0 - self.decay) * param.data + self.decay * self.shadow[name]
                 self.shadow[name] = new_average.clone()
 
-    def apply_shadow(self):
+    def apply(self):
+        if self.decay == 0.0:
+            return
+        
         for name, param in self.model.named_parameters():
             if param.requires_grad:
                 assert name in self.shadow
@@ -44,6 +60,9 @@ class EMA:
                 param.data = self.shadow[name]
 
     def restore(self):
+        if self.decay == 0.0:
+            return
+
         for name, param in self.model.named_parameters():
             if param.requires_grad:
                 assert name in self.backup

@@ -16,6 +16,7 @@ class D2DSB(base_class.SB):
         t_max = self.config.t_max
         n_steps = self.config.n_steps
 
+        self.bwd_model_ema.apply()
         for step_iter in trange(self.config.num_fwd_steps, leave=False, 
                                desc=f"It {sb_iter} | Forward"):
             self.fwd_optim.zero_grad(set_to_none=True)
@@ -29,14 +30,17 @@ class D2DSB(base_class.SB):
                 "fwd_step": sb_iter * self.config.num_fwd_steps + step_iter
             })
 
-            self.fwd_ema_loss.update(loss.item() / n_steps)
             self.fwd_optim.step()
+            self.fwd_model_ema.update()
+
+        self.bwd_model_ema.restore()
 
     def train_backward_step(self, sb_iter, run):
         dt = self.config.dt
         t_max = self.config.t_max
         n_steps = self.config.n_steps
 
+        self.fwd_model_ema.apply()
         for step_iter in trange(self.config.num_bwd_steps, leave=False,
                                 desc=f"It {sb_iter} | Backward"):
             self.bwd_optim.zero_grad(set_to_none=True)
@@ -50,8 +54,10 @@ class D2DSB(base_class.SB):
                 "bwd_step": sb_iter * self.config.num_bwd_steps + step_iter
             })
 
-            self.bwd_ema_loss.update(loss.item() / n_steps)
             self.bwd_optim.step()
+            self.bwd_model_ema.update()
+
+        self.fwd_model_ema.restore()
 
     @torch.no_grad()
     def log_forward_step(self, sb_iter, run):
