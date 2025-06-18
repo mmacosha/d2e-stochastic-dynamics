@@ -80,7 +80,7 @@ class D2ESB(base_class.SB):
             })
         
         self.fwd_model_ema.restore()
-                    
+
     def train_forward_step(self, sb_iter, run):
         dt = self.config.dt
         t_max = self.config.t_max
@@ -165,8 +165,8 @@ class D2ESB(base_class.SB):
 
         x0 = self.p0.sample(self.config.val_batch_size).to(self.config.device)
         elbo, iw_1, iw_2 = metrics.compute_elbo(self.fwd_model, self.bwd_model, 
-                                                self.p1.log_density, x0, dt, t_max, 
-                                                n_steps, n_traj=16)
+                                                self.p1.log_density, x0, dt, 
+                                                t_max, n_steps, n_traj=16)
 
         real_img = self.p1.reward.generator(x0[:36]).cpu()
         
@@ -178,21 +178,25 @@ class D2ESB(base_class.SB):
                                            dt, n_steps, t_max, only_last=True)
         self.p1_buffer.update(x1_pred.detach())
 
-        pred_img = self.p1.reward.generator(x1_pred[:36])
-        logits = self.p1.reward.classifier(pred_img[:36]).cpu()
+        pred_img = self.p1.reward.generator(x1_pred)
+        logits = self.p1.reward.classifier(pred_img).cpu()
         (p, c) = logits.softmax(dim=1).max(dim=1)
+
+        target_classes = torch.tensor(self.p1.reward.target_classes).view(-1, 1)
+        precision = (c == target_classes.to(c.device)).sum() / c.size(0)
         
         pred_img_grid = make_grid(
-            pred_img.cpu().view(image_shape), nrow=6, normalize=True
+            pred_img[:36].cpu().view(image_shape), nrow=6, normalize=True
         )
         fig = utils.plot_annotated_images(
-            pred_img, (p, c), n_col=6, figsize=(18, 18)
+            pred_img[:36], (p[:36], c[:36]), n_col=6, figsize=(18, 18)
         )
         
         run.log({
             "images/x1_sample_annotated": wandb.Image(fig),
             "images/x0_sample": wandb.Image(real_img_grid),
             "images/x1-sample": wandb.Image(pred_img_grid), 
+            "precision": precision,
             "metrics/p1_elbo": elbo, 
             "metrics/p1_iw_1": iw_1, 
             "metrics/p1_iw_2": iw_2,
