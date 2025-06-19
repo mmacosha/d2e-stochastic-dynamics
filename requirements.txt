@@ -7,3 +7,4 @@ omegaconf==2.3.0
 click
 tqdm
 einops
+pandas

@@ -10,6 +10,5 @@ data/
 wandb/
 assets/
 outputs/
-rewards/
 sb-ebm/
 external/

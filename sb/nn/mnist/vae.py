@@ -45,6 +45,11 @@ class MnistVAE(nn.Module):
         x_pred = self.decoder(mu + z *std)
         return x_pred, mu, std
 
+    @staticmethod
+    def kl_loss(mu, std):
+        log_std = torch.log(std)
+        return -0.5 * (1.0 + 2 * log_std - mu.pow(2) - std.pow(2)).sum(dim=1)
+
     def compute_loss(self, x, kl_weight=1.0):
         x_pred, mu, std = self(x)
 

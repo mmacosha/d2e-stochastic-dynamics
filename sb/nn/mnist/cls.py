@@ -21,9 +21,11 @@ class MnistCLS(nn.Module):
             self.cls.load_state_dict(state_dict)
 
     def forward(self, x):
-        return self.cls(x)
+        return self.cls(x.view(-1, 784))
     
-    def compute_loss(self, x, y):
+    def compute_loss(self, x, y, return_logits: bool = False):
         logits = self(x)
+        if return_logits:
+            return logits, nn.functional.cross_entropy(logits, y)
         return nn.functional.cross_entropy(logits, y)
     
