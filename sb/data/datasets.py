@@ -3,7 +3,7 @@ import math
 import torch
 from torch import distributions 
 
-from sb.nn.reward import Reward
+from sb.nn.reward import ClsReward
 
 from . import base
 from . import datasets_fn_2d
@@ -127,16 +127,29 @@ class SimpleGaussian(base.Dataset):
         return self.dist.log_prob(x)
 
 
-@registry.add(name="mnist_reward")
-class MNISTReward(base.Dataset):
-    def __init__(self, reward_num, reward_ckpt, reward_type='sum', device='cpu'):
-        self.reward = Reward(reward_num, reward_type, reward_ckpt).to(device)
-        self.log_prior = lambda x: (
-            - x.size(1) / 2 * math.log(2 * math.pi) - x.pow(2).sum(dim=1) / 2
+@registry.add(name="cls_reward_dist")
+class ClsRewardDist(base.Dataset):
+    def __init__(self, generator_type: str, classifier_type: str, prior_dim: int, 
+                 target_classes, reward_type: str, device: str):
+        self.reward = ClsReward.build_reward(
+            generator_type, classifier_type, target_classes, reward_type
         )
+        self.reward.to(device).eval()
+        self.prior = SimpleGaussian(0, 1, dim=prior_dim, device=device)
 
-    def sample(self, size: int):
+    def sample(self, *args):
         raise NotImplementedError
 
     def log_density(self, x):
-        return self.log_prior(x) + torch.log(self.reward(x))
+        return self.prior.log_density(x).sum(1) + self.reward(x).log()
+
+    def __call__(self, x):
+        return self.log_density(x)
+
+    def grad_log_density(self, x):
+        x_ = x.clone().detach().requires_grad_(True)
+
+        log_density = self.log_density(x_)
+        log_density.sum().backward()
+
+        return x_.grad

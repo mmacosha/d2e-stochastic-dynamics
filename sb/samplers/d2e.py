@@ -34,13 +34,18 @@ class D2ESBConfig(base_class.SBConfig):
     reuse_backward_trajectory: bool = True
     n_trajectories: int = 2
     buffer_type: str = 'simple'
-    policy: str = 'on_policy'  # on_policy, off_policy, mix
     off_policy_fraction: float = 0.25
     start_mixed_from: int = 0
-    val_batch_size: int = 1024
+    val_batch_size: int = 64
     buffer_size: int = 1024
     langevin_step_size: float = 0.001
     num_langevin_update_steps: int = 10
+
+    def __post__init__(self):
+        super().__post__init__()
+        assert self.matching_method == 'll', \
+            "D2E training does not support other matching methods"
+        assert self.start_mixed_from >= 0
 
 
 class D2ESB(base_class.SB):
@@ -95,50 +100,48 @@ class D2ESB(base_class.SB):
                                 leave=False, desc=f'It {sb_iter} | Forward'):
             self.fwd_optim.zero_grad(set_to_none=True)
 
-            if sb_iter == 0:
+            # if sb_iter == 0:
+            #     x0 = self.p0.sample(batch_size // n_trajectories).to(device)
+            #     x0 = x0.repeat(n_trajectories, 1)
+            #     loss = losses.compute_fwd_vargrad_loss(self.fwd_model, self.bwd_model, 
+            #                                            self.p1.log_density, x0, dt, 
+            #                                            t_max, n_steps, 
+            #                                            p1_buffer=self.p1_buffer,
+            #                                            n_trajectories=n_trajectories,
+            #                                            )
+            # else:
+            #     current_policy = self.config.policy
+            #     if current_policy in {"mix", "off_policy"} \
+            #         and sb_iter < self.config.start_mixed_from:
+            #         current_policy = "on_policy"
+            # if current_policy == "on_policy":
+
+            if self.config.off_policy_fraction == 0 \
+                or sb_iter <= self.config.start_mixed_from:
                 x0 = self.p0.sample(batch_size // n_trajectories).to(device)
-                x0 = x0.repeat(n_trajectories, 1)
-                loss = losses.compute_fwd_vargrad_loss(self.fwd_model, self.bwd_model, 
-                                                       self.p1.log_density, x0, dt, 
-                                                       t_max, n_steps, 
-                                                       p1_buffer=self.p1_buffer,
-                                                       n_trajectories=n_trajectories,
-                                                       )
-
+            
+            elif self.config.off_policy_fraction == 1.0:
+                x1 = self.p1_buffer.sample(batch_size // n_trajectories).to(device)
+                x0 = sutils.sample_trajectory(self.bwd_model, x1,"backward", 
+                                              dt, n_steps, t_max, only_last=True)
+            # elif current_policy == "mix":
             else:
-                current_policy = self.config.policy
-                
-                if current_policy in {"mix", "off_policy"} \
-                    and sb_iter < self.config.start_mixed_from:
-                    current_policy = "on_policy"
+                num_off_policy_samples = int(
+                    self.config.off_policy_fraction * (batch_size // n_trajectories)
+                )
+                x1 = self.p1_buffer.sample(num_off_policy_samples).to(device)
+                x0_off = sutils.sample_trajectory(self.bwd_model, x1,"backward", 
+                                                  dt, n_steps, t_max, only_last=True)
+                x0_on = self.p0.sample(
+                    batch_size // n_trajectories - num_off_policy_samples
+                ).to(device)
+                x0 = torch.cat([x0_off, x0_on], dim=0)
 
-                if current_policy == "on_policy":
-                    x0 = self.p0.sample(batch_size // n_trajectories).to(device)
-                
-                elif current_policy == "off_policy":
-                    x1 = self.p1_buffer.sample(batch_size // n_trajectories).to(device)
-                    x0 = sutils.sample_trajectory(self.bwd_model, x1,"backward", 
-                                                dt, n_steps, t_max, only_last=True)
-                elif current_policy == "mix":
-                    num_off_policy_samples = int(
-                        self.config.off_policy_fraction * (batch_size // n_trajectories)
-                    )
-                    x1 = self.p1_buffer.sample(num_off_policy_samples).to(device)
-                    x0_off = sutils.sample_trajectory(self.bwd_model, x1,"backward", 
-                                                      dt, n_steps, t_max, 
-                                                      only_last=True)
-                    x0_on = self.p0.sample(
-                        batch_size // n_trajectories - num_off_policy_samples
-                    ).to(device)
-                    x0 = torch.cat([x0_off, x0_on], dim=0)
-
-                x0 = x0.repeat(n_trajectories, 1)
-                loss = losses.compute_fwd_vargrad_loss(self.fwd_model, self.bwd_model, 
-                                                       self.p1.log_density, x0, dt, 
-                                                       t_max, n_steps, 
-                                                       p1_buffer=self.p1_buffer,
-                                                       n_trajectories=n_trajectories,
-                                                       )
+            x0 = x0.repeat(n_trajectories, 1)
+            loss = losses.compute_fwd_vargrad_loss(self.fwd_model, self.bwd_model, 
+                                                   self.p1.log_density, x0, dt, t_max, 
+                                                   n_steps, p1_buffer=self.p1_buffer,
+                                                   n_trajectories=n_trajectories)
             with torch.no_grad():
                 x0 = self.p0.sample(self.config.val_batch_size).to(device)
                 x1 = sutils.sample_trajectory(self.fwd_model, x0, "forward", 
@@ -155,6 +158,7 @@ class D2ESB(base_class.SB):
                 "fwd_step": sb_iter * self.config.num_fwd_steps + step_iter
             })
         
+        torch.cuda.empty_cache()
         self.bwd_model_ema.restore()
 
     @torch.no_grad()
@@ -178,7 +182,7 @@ class D2ESB(base_class.SB):
                                            dt, n_steps, t_max, only_last=True)
         self.p1_buffer.update(x1_pred.detach())
 
-        pred_img = self.p1.reward.generator(x1_pred)
+        pred_img = self.p1.reward.generator(x1_pred).clip(-1, 1) * 0.5 + 0.5
         logits = self.p1.reward.classifier(pred_img).cpu()
         (p, c) = logits.softmax(dim=1).max(dim=1)
 

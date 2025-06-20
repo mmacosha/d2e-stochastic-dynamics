@@ -4,6 +4,7 @@ from tqdm.auto import trange
 import matplotlib.pyplot as plt
 
 import sb.utils as utils
+import sb.metrics as metrics
 
 from . import losses
 from . import utils as sutils
@@ -72,8 +73,14 @@ class D2DSB(base_class.SB):
         trajectory = [tensor.cpu() for tensor in trajectory]
         figure = utils.plot_trajectory(trajectory, timesteps, 
                                        title=f"Forward Process, step={sb_iter}")
-
+        x1_true = self.p1.sample(self.config.batch_size).to(self.config.device)
+        W2 = metrics.compute_w2_distance(
+            x1_true, 
+            trajectory[-1].to(self.config.device)
+        )
+        
         run.log({
+            "metrics/W2": W2,
             "images/forward_trajectory": wandb.Image(figure), 
             "sb_iter": sb_iter
         })

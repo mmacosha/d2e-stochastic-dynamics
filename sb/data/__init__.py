@@ -1,1 +1,1 @@
-from data.datasets import registry as datasets
+from sb.data.datasets import registry as datasets

@@ -7,7 +7,7 @@ from sb.nn.mnist import MnistGen, MnistCLS
 import sys
 sys.path.append("./external/sg3")
 
-import dnnlib, legacy
+# import dnnlib, legacy
 
 
 def dirichlet_reward(
@@ -70,21 +70,22 @@ class ClsReward(nn.Module):
             )
         self.reward_fn = REWARD_FUNCTIONS[reward_type]
         self.target_classes = target_classes
+        
         self.generator = generator
         self.classifier = classifier
+        
         self.eval()
+        for param in self.parameters():
+            param.requires_grad = False
 
     def forward(self, latents):
-        with torch.no_grad():
-            x_pred = self.generator(latents)
-            x_pred = _renormalize(x_pred)
-            logits = self.classifier(x_pred)
+        x_pred = self.generator(latents)
+        x_pred = _renormalize(x_pred)
+        logits = self.classifier(x_pred)
         
         probas = logits.softmax(dim=1)
         rewards = probas[:, self.target_classes]
-        
-        reward = self.reward_fn(rewards)
-        return reward
+        return self.reward_fn(rewards)
 
     def state_dict(self):
         return {
@@ -104,39 +105,33 @@ class ClsReward(nn.Module):
             generator = StyleGanWrapper(
                 'rewards/cifar10/stylegan2-cifar10-32x32.pkl'
             )
-            generator.eval()
         
         elif generator_type in {"mnist-gan-z10", "mnist-gan-z50"}:
             ckpt = torch.load(f'./rewards/mnist/{generator_type}.pt', 
                               map_location='cpu', weights_only=True)
             generator = MnistGen(**ckpt["config"])
             generator.load_state_dict(ckpt["state_dict"])
-            generator.eval()
 
-        elif generator_type in {'cifar10-gan-z50', 'cifar-gan-z100', 
-                                'cifar-gan-z256'}:
-            ckpt = torch.load(f'./rewards/cifar/{generator_type}.pt',
+        elif generator_type in {'cifar10-gan-z50', 'cifar-gan-z100', 'cifar-gan-z256'}:
+            ckpt = torch.load(f'./rewards/cifar10/{generator_type}.pt',
                                map_location='cpu', weights_only=True)
             generator = CifarGen(**ckpt['config'], inference=True)
             generator.load_state_dict(ckpt['state_dict'])
-            generator.eval()
         
         else:
             raise NotImplemented(f"Unknown generator type: {generator_type}")
 
         if classifier_type == 'cifar10-cls':
             classifier = CifarCls()
-            ckpt = torch.load('./rewards/cifar/cifar10-cls.pt', 
+            ckpt = torch.load('./rewards/cifar10/cifar10-cls.pt', 
                               map_location='cpu', weights_only=True)
             classifier.load_state_dict(ckpt)
-            classifier.eval()
         
         elif classifier_type == 'mnist-cls':
-            ckpt = torch.load('./rewards/mnist/mnist-cls.pth', 
+            ckpt = torch.load('/rewards/mnist/mnist-cls.pth', 
                               map_location='cpu', weights_only=True)
             classifier = MnistCLS()
             classifier.load_state_dict(ckpt)
-            classifier.eval()
 
         else:
             raise NotImplemented(f"Unknown classifier type: {classifier_type}")

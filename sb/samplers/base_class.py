@@ -20,9 +20,10 @@ class SBConfig:
     n_sb_iter: int = 10
     num_fwd_steps: int = 6000
     num_bwd_steps: int = 6000
-    threshold: float = 1e-9
+    threshold: float = 5e-6
 
     matching_method: str = "mean"
+    train_log_var: bool = True
 
     fwd_ema_decay: float = 0.999
     bwd_ema_decay: float = 0.999
@@ -81,9 +82,9 @@ def find_checkpoint(directory: str, checkpoint_num: int) -> str :
     if checkpoint_num == -1:
         return str(checkpoints[0][1])
     
-    for num, file in checkpoints:
+    for num, file_ in checkpoints:
         if num == checkpoint_num:
-            return str(file)
+            return Path(file_)
     
     raise FileNotFoundError(f"Checkpoint {checkpoint_num} not found in the directory.")
 
@@ -151,8 +152,8 @@ class SB(ABC):
             'forward_optim': self.fwd_optim.state_dict(), 
             'backward_optim': self.bwd_optim.state_dict(), 
         }
-
         torch.save(checkpoint, checkpoint_path / f'checkpoint-{sb_iter}.pth')
+        wandb.save(checkpoint_path / f'checkpoint-{sb_iter}.pth')
 
     def resotre_from_last_checkpoint(self, run):
         checkpoint_path = find_checkpoint(
@@ -163,7 +164,7 @@ class SB(ABC):
         if checkpoint_path is None:
             print("Checkpoint not found. Train from scratch!")
             return
-        
+        checkpoint_path = Path(checkpoint_path)
         checkpoint = torch.load(checkpoint_path, map_location=self.config.device)
         
         # Handle restoration of a checkpoint

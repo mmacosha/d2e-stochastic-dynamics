@@ -11,28 +11,26 @@ class CifarGen(nn.Module):
         self.main = nn.Sequential(
             nn.ConvTranspose2d(z_dim, ngf * 4, 4, 1, 0, bias=False),
             nn.BatchNorm2d(ngf * 4),
-            nn.ReLU(True),
+            nn.ReLU(False),
             
             nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
             nn.BatchNorm2d(ngf * 2),
-            nn.ReLU(True),
+            nn.ReLU(False),
             
-            nn.ConvTranspose2d( ngf * 2, ngf, 4, 2, 1, bias=False),
+            nn.ConvTranspose2d(ngf * 2, ngf, 4, 2, 1, bias=False),
             nn.BatchNorm2d(ngf),
-            nn.ReLU(True),
+            nn.ReLU(False),
             
-            nn.ConvTranspose2d( ngf, 3, 4, 2, 1, bias=False),
+            nn.ConvTranspose2d(ngf, 3, 4, 2, 1, bias=False),
             nn.Tanh()
         )
 
     def forward(self, z):
         if z.ndim == 2:
-            z = z[..., None, None]
+            z = z.reshape(z.size(0), z.size(1), 1, 1)
         
         img = self.main(z)
 
-        if self.inference:
-            return (img / 2 + 0.5).clip(0, 1)
         return img
 
     @torch.no_grad()
@@ -49,21 +47,26 @@ class CifarGen(nn.Module):
 
 
 class CifarDisc(nn.Module):
-    def __init__(self, channels: int = 3, sigmoid: bool = False):
+    def __init__(self, ndf, sigmoid: bool = False):
         super().__init__()
         self.main = nn.Sequential(
-            nn.Conv2d(channels, 64, 4, 2, 1, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(3, ndf, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ndf),
+            nn.LeakyReLU(0.2, inplace=False),
+            
+            nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ndf * 2),
+            nn.LeakyReLU(0.2, inplace=False),
+            
+            nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ndf * 4),
+            nn.LeakyReLU(0.2, inplace=False),
+            
+            nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ndf * 8),
+            nn.LeakyReLU(0.2, inplace=False),
 
-            nn.Conv2d(64, 128, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(128),
-            nn.LeakyReLU(0.2, inplace=True),
-
-            nn.Conv2d(128, 256, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(256),
-            nn.LeakyReLU(0.2, inplace=True),
-    
-            nn.Conv2d(256, 1, 4, 1, 0, bias=False),
+            nn.Conv2d(ndf * 8, 1, 2, 1, 0, bias=False),
             nn.Sigmoid() if sigmoid else nn.Identity()
         )
 
