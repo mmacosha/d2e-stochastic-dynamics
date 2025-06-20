@@ -1,0 +1,73 @@
+sampler:
+  name: d2d
+  device: cuda:0
+  save_checkpoint_freq: 5
+  log_fwd_freq: 1
+  log_bwd_freq: 1
+  
+  # training
+  n_sb_iter: 20
+  batch_size: 128
+  backward_first: true
+  fwd_optim_lr: 8e-4
+  bwd_optim_lr: 8e-4
+  num_fwd_steps: 4000
+  num_bwd_steps: 4000
+  fwd_ema_decay: 0.0
+  bwd_ema_decay: 0.0
+  matching_method: ll
+  train_log_var: true
+
+  # ref process
+  alpha: 1.42
+  dt: 0.004
+  t_max: 0.08
+  n_steps: 20
+
+exp:
+  id: null
+  resume: allow
+  name: d2d-sb-ablations
+  project: sb-ablations
+  mode: online
+
+data:
+  p_0: 
+    name: simple_gaussian
+    args: 
+      mean: 0.0
+      std: 0.7
+      dim: 2
+      device: ${sampler.device}
+  p_1:
+    name: mix_of_gaussians
+    args: 
+      means: [[1.0, 0.0], [0.7, 0.7], [0.0, 1.0], [-0.7, 0.7], [-1.0, 0.0], [-0.7, -0.7], [0.0, -1.0], [0.7, -0.7]]
+      sigmas: [[0.1, 0.1], [0.1, 0.1], [0.1, 0.1], [0.1, 0.1], [0.1, 0.1], [0.1, 0.1], [0.1, 0.1], [0.1, 0.1]]
+      device: ${sampler.device}
+
+models:
+  fwd:
+    t_emb_size: 64
+    x_emb_size: 64
+    in_dim: 2
+    out_dim: 2
+    n_main_body_layers: 3
+    predict_log_var: ${sampler.train_log_var}
+    use_residual: false
+  bwd:
+    t_emb_size: 64
+    x_emb_size: 64
+    in_dim: 2
+    out_dim: 2
+    n_main_body_layers: 3
+    predict_log_var: ${sampler.train_log_var}
+    use_residual: false
+
+hydra:
+  run:
+    dir: "."
+  output_subdir: null
+  job_logging:
+    disable_existing_loggers: true
+  verbose: false

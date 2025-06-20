@@ -1,39 +1,39 @@
 sampler:
   name: d2e
   device: cuda:0
-
-  # training parameters:
+  save_checkpoint_freq: 5
+  log_fwd_freq: 1
+  log_bwd_freq: 1
+  
+  # training
+  n_sb_iter: 100
+  batch_size: 64
   backward_first: true
   fwd_optim_lr: 8e-4
   bwd_optim_lr: 8e-4
-  save_checkpoint_freq: 5
+  num_fwd_steps: 2000
+  num_bwd_steps: 500
+  fwd_ema_decay: 0.0
+  bwd_ema_decay: 0.0
+  matching_method: ll
 
-  threshold: 5e-6
-  n_sb_iter: 20
-  num_fwd_steps: 5000
-  num_bwd_steps: 5000
-  log_fwd_freq: 1
-  log_bwd_freq: 1
-
+  # ref process
   alpha: 0.0
-  dt: 0.004
-  t_max: 0.08
+  dt: 0.04
+  t_max: 0.d8
   n_steps: 20
 
-  batch_size: 64
-  val_batch_size: 128
-
+  # policy
   n_trajectories: 2
-  drift_reg_coeff: 0.0
-  reuse_backward_trajectory: false
-
-  policy: mixed
-  off_policy_fraction: 0.25
   start_mixed_from: 0
-  buffer_type: simple
-  buffer_size: 1024
-  langevin_step_size: 0.001
-  num_langevin_update_steps: 50
+  off_policy_fraction: 0.7
+  reuse_backward_trajectory: false
+  
+  # buffer
+  buffer_type: langevin
+  buffer_size: 128
+  langevin_step_size: 0.1
+  num_langevin_update_steps: 10
 
 exp:
   id: null
@@ -53,8 +53,8 @@ data:
   p_1:
     name: cls_reward_dist
     args: 
-      generator_type: cifar-gan-z50
-      classifier_type: cifar_cls
+      generator_type: cifar10-gan-z50
+      classifier_type: cifar10-cls
       prior_dim: 50
       target_classes: [5]
       reward_type: sum
@@ -66,7 +66,7 @@ models:
     x_emb_size: 64
     in_dim: 50
     out_dim: 50
-    n_main_body_layers: 5
+    n_main_body_layers: 4
     predict_log_var: true
     use_residual: false
   bwd:
@@ -74,7 +74,7 @@ models:
     x_emb_size: 64
     in_dim: 50
     out_dim: 50
-    n_main_body_layers: 5
+    n_main_body_layers: 4
     predict_log_var: true
     use_residual: false
 
