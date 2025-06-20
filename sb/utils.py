@@ -102,7 +102,7 @@ def plot_trajectory(trajectory, timesteps, indices: list = None,
             title = f'timestep: {round(timesteps[i], 4)}'
         
         axes[i].set_title(title)
-        axes[i].scatter(sample[:, 0], sample[:, 1], c='b')
+        axes[i].scatter(sample[:, 0], sample[:, 1], c='b', s=0.5)
         axes[i].set_xlim(*limits)
         axes[i].set_ylim(*limits)
     
