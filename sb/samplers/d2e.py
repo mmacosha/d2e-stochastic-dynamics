@@ -200,7 +200,7 @@ class D2ESB(base_class.SB):
             "images/x1_sample_annotated": wandb.Image(fig),
             "images/x0_sample": wandb.Image(real_img_grid),
             "images/x1-sample": wandb.Image(pred_img_grid), 
-            "precision": precision,
+            "metrics/precision": precision,
             "metrics/p1_elbo": elbo, 
             "metrics/p1_iw_1": iw_1, 
             "metrics/p1_iw_2": iw_2,

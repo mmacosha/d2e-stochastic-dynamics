@@ -17,7 +17,7 @@ class SBConfig:
     name: str  = None 
     device: str = "cpu"
     backward_first: bool = False
-    n_sb_iter: int = 10
+    num_sb_steps: int = 10
     num_fwd_steps: int = 6000
     num_bwd_steps: int = 6000
     threshold: float = 5e-6
@@ -116,7 +116,7 @@ class SB(ABC):
             wandb.define_metric("backward_loss", step_metric="bwd_step")
 
             self.resotre_from_last_checkpoint(run)
-            for sb_iter in trange(self.config.n_sb_iter, leave=False, 
+            for sb_iter in trange(self.config.num_sb_steps, leave=False, 
                                   desc="SB training"):
                 if self.config.backward_first:
                     self.train_backward_step(sb_iter, run)

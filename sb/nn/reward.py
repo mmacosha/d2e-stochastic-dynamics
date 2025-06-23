@@ -7,7 +7,7 @@ from sb.nn.mnist import MnistGen, MnistCLS
 import sys
 sys.path.append("./external/sg3")
 
-# import dnnlib, legacy
+import dnnlib, legacy
 
 
 def dirichlet_reward(
@@ -78,11 +78,14 @@ class ClsReward(nn.Module):
         for param in self.parameters():
             param.requires_grad = False
 
-    def forward(self, latents):
+    def classify(self, latents):
         x_pred = self.generator(latents)
         x_pred = _renormalize(x_pred)
         logits = self.classifier(x_pred)
-        
+        return logits 
+
+    def forward(self, latents):
+        logits = self.classify(latents)
         probas = logits.softmax(dim=1)
         rewards = probas[:, self.target_classes]
         return self.reward_fn(rewards)
@@ -103,7 +106,7 @@ class ClsReward(nn.Module):
         target_classes, reward_type='sum'):        
         if generator_type == 'cifar10-stylegan':
             generator = StyleGanWrapper(
-                'rewards/cifar10/stylegan2-cifar10-32x32.pkl'
+                './rewards/cifar10/stylegan2-cifar10-32x32.pkl'
             )
         
         elif generator_type in {"mnist-gan-z10", "mnist-gan-z50"}:
@@ -112,14 +115,16 @@ class ClsReward(nn.Module):
             generator = MnistGen(**ckpt["config"])
             generator.load_state_dict(ckpt["state_dict"])
 
-        elif generator_type in {'cifar10-gan-z50', 'cifar-gan-z100', 'cifar-gan-z256'}:
+        elif generator_type in {'cifar10-gan-z50', 'cifar10-gan-z100', 'cifar10-gan-z256'}:
             ckpt = torch.load(f'./rewards/cifar10/{generator_type}.pt',
                                map_location='cpu', weights_only=True)
             generator = CifarGen(**ckpt['config'], inference=True)
             generator.load_state_dict(ckpt['state_dict'])
         
         else:
-            raise NotImplemented(f"Unknown generator type: {generator_type}")
+            raise NotImplementedError(
+                f"Unknown generator type: {generator_type}"
+            )
 
         if classifier_type == 'cifar10-cls':
             classifier = CifarCls()
@@ -128,7 +133,7 @@ class ClsReward(nn.Module):
             classifier.load_state_dict(ckpt)
         
         elif classifier_type == 'mnist-cls':
-            ckpt = torch.load('/rewards/mnist/mnist-cls.pth', 
+            ckpt = torch.load('./rewards/mnist/mnist-cls.pth', 
                               map_location='cpu', weights_only=True)
             classifier = MnistCLS()
             classifier.load_state_dict(ckpt)
