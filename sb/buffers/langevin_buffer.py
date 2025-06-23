@@ -12,23 +12,27 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
     def __init__(
             self, 
             size: int, 
-            log_density: Callable, 
+            p1, 
             init_step_size: float, 
             num_steps: int,
             sampler: str = 'ula',
             noise_start_ration: float = 0.0,
             anneal_value: float = 1.0,
             hmc_freq: int = 4,
-
+            reward_threshold: float = 0.8,
         ):
         super().__init__(size)
+        self.anneal_value = anneal_value
+        self.hmc_freq = hmc_freq
+        self.noise_start_ration = noise_start_ration
+        self.num_steps = num_steps
+        self.reward_threshold = reward_threshold
+        
         self.sampler = sampler
         self.step_size = init_step_size
-        self.log_density = log_density
-        self.num_steps = num_steps
-        self.hmc_freq = hmc_freq
-        self.anneal_value = anneal_value
-        self.noise_start_ration = noise_start_ration
+        
+        self.log_density = p1.log_density
+        self.reward = p1.reward
 
     def run_sampler(self, x):
         if self.sampler == 'hmc':
@@ -68,6 +72,15 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
             dt *= anneal_alpha
         
         return x
+    
+    @torch.no_grad()
+    def update(self, batch):
+        if self.reward_threshold > 0.0:
+            rewards = self.reward(batch)
+            batch = batch[rewards > self.reward_threshold]
+
+        self.buffer = self.buffer[-self.size + batch.size(0):]
+        self.buffer.extend(batch.split(1, 0))
 
     def sample(self, batch_size):
         if self.sampler == "legacy":
@@ -79,7 +92,8 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
         else:
             x = super().sample(batch_size)
             noise_size = int(batch_size * self.noise_start_ration)
-            x[-noise_size:] = torch.randn(noise_size, x.size(1), device=x.device)
+            if noise_size > 0:
+                x[-noise_size:] = torch.randn(noise_size, x.size(1), device=x.device)
             x = self.run_sampler(x)
                 
         return x

@@ -33,13 +33,20 @@ class D2ESBConfig(base_class.SBConfig):
     drift_reg_coeff: float = 0.0
     reuse_backward_trajectory: bool = True
     n_trajectories: int = 2
-    buffer_type: str = 'simple'
     off_policy_fraction: float = 0.25
     start_mixed_from: int = 0
     val_batch_size: int = 64
-    buffer_size: int = 1024
-    langevin_step_size: float = 0.001
-    num_langevin_update_steps: int = 10
+    
+    # Buffer parameters
+    buffer_type: str = 'simple'
+    buffer_size: int = 512
+    init_step_size: float = 0.1
+    num_langevin_steps: int = 20
+    buffer_sampler: str = 'legacy'
+    noise_start_ratio: float = 0.5
+    reward_threshold: float = 0.0
+    anneal_value: float = 0.1
+    hmc_freq: int = 4
 
     def __post__init__(self):
         super().__post__init__()
@@ -56,8 +63,14 @@ class D2ESB(base_class.SB):
             self.p1_buffer = ReplayBuffer(config.buffer_size)
         elif config.buffer_type == "langevin":
             self.p1_buffer = LangevinReplayBuffer(
-                config.buffer_size, self.p1.grad_log_density, 
-                config.langevin_step_size, config.num_langevin_update_steps
+                size=config.buffer_size, 
+                p1=self.p1, 
+                init_step_size=config.init_step_size, 
+                num_steps=config.num_langevin_steps,
+                sampler=config.buffer_sampler,
+                noise_start_ration=config.noise_start_ratio,
+                anneal_value=config.anneal_value,
+                hmc_freq=config.hmc_freq
             )
         else:
             raise ValueError(f"Buffer is unknow: {config.buffer_type}")
