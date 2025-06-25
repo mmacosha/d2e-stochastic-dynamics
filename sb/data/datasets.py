@@ -23,6 +23,7 @@ class MixOfGaussians(base.Dataset):
         self.gmm = distributions.MixtureSameFamily(mix, comp)
 
         self.grad_fn = torch.func.grad(lambda y: self.gmm.log_prob(y).sum())
+        self.reward = lambda x: torch.as_tensor(1.0)
 
     def sample(self, size):
         return self.gmm.sample((size, ))

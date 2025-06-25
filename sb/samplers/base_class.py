@@ -1,3 +1,4 @@
+from typing import Optional
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -38,11 +39,12 @@ class SBConfig:
     n_steps: int = 20
 
     batch_size: int = 512
+    val_batch_size: Optional[int] = None
     save_checkpoint_freq: int = 2
     restore_from: int = -1
-    watch_models: bool = True
 
     def __post__init__(self):
+        self.val_batch_size = self.val_batch_size or self.batch_size
         assert self.dt * self.n_steps == self.t_max
 
         assert self.matching_method in {"mean", "score", "ll"}, \

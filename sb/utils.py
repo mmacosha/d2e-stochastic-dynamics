@@ -71,8 +71,8 @@ class EMA:
         self.backup = {}
 
 
-def plot_annotated_images(batch, classes_probas, n_col=8, figsize=(12, 6)):
-    probas, classes = classes_probas
+def plot_annotated_images(batch, probas_classes, n_col=8, figsize=(12, 6)):
+    probas, classes = probas_classes
     f, ax = plt.subplots(batch.size(0) // n_col, n_col, figsize=figsize)
     for i in range(batch.size(0)):
         row, col = divmod(i, n_col)

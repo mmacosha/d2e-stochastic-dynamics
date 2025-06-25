@@ -64,20 +64,25 @@ class ClsReward(nn.Module):
         for param in self.parameters():
             param.requires_grad = False
 
-    def get_logits(self, latents):
+    def forward(self, latents):
         x_pred = self.generator(latents)
         x_pred = _renormalize(x_pred)
         logits = self.classifier(x_pred)
-        return logits 
+        probas, classes = logits.softmax(dim=1).max(dim=1)
+        return {
+            'logits': logits,
+            'probas': probas,
+            'classes': classes,
+            'images': x_pred    
+        } 
 
-    def forward(self, latents):
-        logits = self.get_logits(latents)
-        probas = logits.softmax(dim=1)
+    def reward(self, latents):
+        probas = self(latents)['probas']
         rewards = probas[:, self.target_classes]
         return self.reward_fn(rewards)
     
     def log_reward(self, latents):
-        logits = self.get_logits(latents)
+        logits = self(latents)['logits']
         logits = logits - logits.max(dim=1, keepdim=True).values
         peaked_logits = logits[:, self.target_classes]
         
