@@ -68,16 +68,18 @@ class ClsReward(nn.Module):
         x_pred = self.generator(latents)
         x_pred = _renormalize(x_pred)
         logits = self.classifier(x_pred)
-        probas, classes = logits.softmax(dim=1).max(dim=1)
+        all_probas = logits.softmax(dim=1)
+        probas, classes = all_probas.max(dim=1)
         return {
             'logits': logits,
             'probas': probas,
+            'all_probas': all_probas,
             'classes': classes,
             'images': x_pred    
         } 
 
     def reward(self, latents):
-        probas = self(latents)['probas']
+        probas = self(latents)['all_probas']
         rewards = probas[:, self.target_classes]
         return self.reward_fn(rewards)
     

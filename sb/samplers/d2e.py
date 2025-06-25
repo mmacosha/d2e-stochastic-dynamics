@@ -37,7 +37,8 @@ class D2ESBConfig(base_class.SBConfig):
     off_policy_fraction: float = 0.25
     start_mixed_from: int = 0
     val_batch_size: int = 64
-    
+    watch_models: bool = False
+
     # Buffer parameters
     buffer_type: str = 'simple'
     buffer_size: int = 512
@@ -138,11 +139,18 @@ class D2ESB(base_class.SB):
                 ).to(device)
                 x0 = torch.cat([x0_off, x0_on], dim=0)
 
-            x0 = x0.repeat(n_trajectories, 1)
-            loss = losses.compute_fwd_vargrad_loss(self.fwd_model, self.bwd_model, 
-                                                   self.p1.log_density, x0, dt, t_max, 
-                                                   n_steps, p1_buffer=self.p1_buffer,
-                                                   n_trajectories=n_trajectories)
+            if n_trajectories == 1:
+                loss = losses.compute_fwd_tb_loss(
+                    self.fwd_model, self.bwd_model, self.p1.log_density, 
+                    self.p0.log_density, x0, dt, t_max, n_steps, 
+                    p1_buffer=self.p1_buffer
+                )
+            else:
+                x0 = x0.repeat(n_trajectories, 1)
+                loss = losses.compute_fwd_vargrad_loss(self.fwd_model, self.bwd_model, 
+                                                    self.p1.log_density, x0, dt, t_max, 
+                                                    n_steps, p1_buffer=self.p1_buffer,
+                                                    n_trajectories=n_trajectories)
             with torch.no_grad():
                 x0 = self.p0.sample(self.config.val_batch_size).to(device)
                 x1 = sutils.sample_trajectory(self.fwd_model, x0, "forward", 

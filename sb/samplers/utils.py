@@ -54,7 +54,7 @@ def sample_trajectory(model, x_start, direction, dt, n_steps, t_max,
         mean, log_var = get_mean_log_var(model, trajectory[-1], t, dt)
         noise_std = log_var.exp().sqrt()
 
-        if matching_method == {"ll", "mean"}:
+        if matching_method in {"ll", "mean"}:
             x_new = mean + torch.randn_like(mean) * noise_std
         
         elif matching_method == "score":

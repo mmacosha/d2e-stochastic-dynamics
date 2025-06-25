@@ -12,29 +12,6 @@ from . import datasets_fn_2d
 registry = base.DatasetRegistry()
 
 
-@registry.add(name="mix_of_gaussians")
-class MixOfGaussians(base.Dataset):
-    def __init__(self, means, sigmas, device: str = 'cpu'):
-        means = torch.as_tensor(means, device=device).float()
-        sigmas = torch.as_tensor(sigmas, device=device).float()
-
-        mix = distributions.Categorical(torch.ones(means.size(0), device=device))
-        comp = distributions.Independent(distributions.Normal(means, sigmas), 1)
-        self.gmm = distributions.MixtureSameFamily(mix, comp)
-
-        self.grad_fn = torch.func.grad(lambda y: self.gmm.log_prob(y).sum())
-        self.reward = lambda x: torch.as_tensor(1.0)
-
-    def sample(self, size):
-        return self.gmm.sample((size, ))
-    
-    def log_density(self, x):
-        return self.gmm.log_prob(x)
-    
-    def grad_log_density(self, x):
-        return self.grad_fn(x)
-
-
 @registry.add(name="two_moons")
 class TwoMoons(base.Dataset):
     def __init__(self, shift=None, noise=None):
@@ -113,6 +90,29 @@ class Checkboard(base.Dataset):
         return next(_iterator())
 
 
+@registry.add(name="mix_of_gaussians")
+class MixOfGaussians(base.Dataset):
+    def __init__(self, means, sigmas, device: str = 'cpu'):
+        means = torch.as_tensor(means, device=device).float()
+        sigmas = torch.as_tensor(sigmas, device=device).float()
+
+        mix = distributions.Categorical(torch.ones(means.size(0), device=device))
+        comp = distributions.Independent(distributions.Normal(means, sigmas), 1)
+        self.gmm = distributions.MixtureSameFamily(mix, comp)
+
+        self.grad_fn = torch.func.grad(lambda y: self.gmm.log_prob(y).sum())
+        self.reward = lambda x: torch.as_tensor(1.0)
+
+    def sample(self, size):
+        return self.gmm.sample((size, ))
+    
+    def log_density(self, x):
+        return self.gmm.log_prob(x)
+    
+    def grad_log_density(self, x):
+        return self.grad_fn(x)
+
+
 @registry.add(name="simple_gaussian")
 class SimpleGaussian(base.Dataset):
     def __init__(self, mean=0, std=1, dim=2, device='cpu'):
@@ -125,7 +125,7 @@ class SimpleGaussian(base.Dataset):
         return self.dist.sample((size, self.dim))
 
     def log_density(self, x):
-        return self.dist.log_prob(x)
+        return self.dist.log_prob(x).sum(dim=1)
 
 
 @registry.add(name="cls_reward_dist")
@@ -142,15 +142,4 @@ class ClsRewardDist(base.Dataset):
         raise NotImplementedError
 
     def log_density(self, x):
-        return self.prior.log_density(x).sum(1) + self.reward.log_reward(x)
-
-    def __call__(self, x):
-        return self.log_density(x)
-
-    def grad_log_density(self, x):
-        x_ = x.clone().detach().requires_grad_(True)
-
-        log_density = self.log_density(x_)
-        log_density.sum().backward()
-
-        return x_.grad
+        return self.prior.log_density(x) + self.reward.log_reward(x)

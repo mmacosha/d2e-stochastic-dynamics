@@ -199,6 +199,16 @@ def compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p, x, dt, t_max,
     return  fwd_tl_sum - bwd_tl_sum
 
 
+def compute_fwd_tb_loss(fwd_model, bwd_model, log_p1, log_p0, x, dt, t_max, 
+                        num_t_steps, p1_buffer = None):
+    log = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p1, x, dt, 
+                                        t_max, num_t_steps, p1_buffer=p1_buffer)
+    log = log - log_p0(x)
+
+    return (log  - log.mean(0, keepdim=True).detach()).pow(2).mean()
+
+
+
 def compute_fwd_vargrad_loss(fwd_model, bwd_model, log_p1, x, dt, t_max, 
                              num_t_steps,p1_buffer = None, n_trajectories: int = 2):
     log = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p1, x, dt, 
@@ -208,7 +218,7 @@ def compute_fwd_vargrad_loss(fwd_model, bwd_model, log_p1, x, dt, t_max,
 
     log = log.reshape(n_trajectories, -1)
     return (log  - log.mean(0, keepdim=True).detach()).pow(2).mean()
-    
+
 
 def compute_bwd_vargrad_loss(fwd_model, bwd_model, log_p0, x, dt, t_max,
                              num_t_steps, p0_buffer = None, n_trajectories: int = 2):

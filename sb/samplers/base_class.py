@@ -6,6 +6,7 @@ from pathlib import Path
 
 import torch
 import wandb
+from omegaconf import OmegaConf
 
 from tqdm import trange
 
@@ -112,11 +113,15 @@ class SB(ABC):
 
         self.reference_process = ReferenceProcess2(self.config.alpha)
 
-    def train(self, experiment):
+    def train(self, experiment, full_cfg=None):
         experiment.name = f"{self.config.name}-{experiment.name}"
         with wandb.init(**experiment, config=self.config) as run:
-            wandb.define_metric("forward_loss", step_metric="fwd_step")
-            wandb.define_metric("backward_loss", step_metric="bwd_step")
+            if full_cfg is not None:
+                cfg_path = f"{run.dir}/full_run_config.yaml"
+                OmegaConf.save(full_cfg, cfg_path)
+                artifact = wandb.Artifact("run-config", type="config")
+                artifact.add_file(cfg_path)
+                wandb.log_artifact(artifact)
 
             if self.config.watch_models:
                 wandb.watch(self.fwd_model, log="all", log_freq=500)
