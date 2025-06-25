@@ -6,7 +6,7 @@
 
 vae/
 ebm/
-data/
+./data/
 wandb/
 assets/
 outputs/

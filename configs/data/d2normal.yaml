@@ -1,0 +1,6 @@
+name: simple_gaussian
+args: 
+  mean: 0.0
+  std: 0.7
+  dim: 2
+  device: ${sampler.device}

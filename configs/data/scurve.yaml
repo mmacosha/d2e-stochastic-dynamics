@@ -1,0 +1,4 @@
+name: s_curve
+args: 
+  shift: 0.0
+  noise: 0.1

@@ -1,0 +1,4 @@
+name: two_moons
+args: 
+  shift: 0.0
+  noise: 0.05
