@@ -13,8 +13,8 @@ sampler:
   bwd_optim_lr: 5e-4
   num_fwd_steps: 2000
   num_bwd_steps: 500
-  fwd_ema_decay: 0.0
-  bwd_ema_decay: 0.0
+  fwd_ema_decay: 0.99
+  bwd_ema_decay: 0.99
   matching_method: ll
 
   # ref process
@@ -47,32 +47,32 @@ data:
     args: 
       mean: 0.0
       std: 1.0
-      dim: 100
+      dim: 50
       device: ${sampler.device}
   p_1:
     name: cls_reward_dist
     args: 
-      generator_type: cifar10-gan-z100
+      generator_type: cifar10-gan-z50
       classifier_type: cifar10-cls
-      prior_dim: 100
+      prior_dim: 50
       target_classes: [5]
       reward_type: sum
       device: ${sampler.device}
 
 models:
   fwd:
-    t_emb_size: 128
-    x_emb_size: 128
-    in_dim: 100
-    out_dim: 100
+    t_emb_size: 64
+    x_emb_size: 64
+    in_dim: 50
+    out_dim: 50
     n_main_body_layers: 6
     predict_log_var: true
     use_residual: false
   bwd:
-    t_emb_size: 128
-    x_emb_size: 128
-    in_dim: 100
-    out_dim: 100
+    t_emb_size: 64
+    x_emb_size: 64
+    in_dim: 50
+    out_dim: 50
     n_main_body_layers: 6
     predict_log_var: true
     use_residual: false
