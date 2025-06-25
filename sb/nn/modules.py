@@ -31,7 +31,8 @@ class Block(nn.Module):
         self.block = nn.Sequential(
             nn.Linear(in_dim, out_dim), 
             nn.LayerNorm(out_dim) if use_ln else nn.Identity(), 
-            nn.ELU()
+            # nn.ELU()
+            nn.SiLU()
         )
     
     def forward(self, x):

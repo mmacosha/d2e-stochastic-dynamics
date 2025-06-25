@@ -10,20 +10,6 @@ sys.path.append("./external/sg3")
 import dnnlib, legacy
 
 
-def dirichlet_reward(
-        target_values: torch.Tensor, 
-        alpha=-0.01, 
-        max_reward: float = 5.0
-    ):
-    if target_values.shape[1] == 1:
-        return target_values.squeeze(1)
-
-    x = target_values / target_values.sum(dim=1, keepdim=True)
-    alphas = torch.ones_like(x) * alpha
-    
-    return torch.minimum(x ** alphas, torch.as_tensor(max_reward)).prod(dim=1)
-
-
 def max_reward(target_values):
     return target_values.max(dim=1).values
 
@@ -33,7 +19,6 @@ def sum_reward(target_values):
 
 
 REWARD_FUNCTIONS = {
-    'dirichlet': dirichlet_reward,
     'max': max_reward,
     'sum': sum_reward
 }
@@ -56,7 +41,7 @@ class StyleGanWrapper(nn.Module):
 def _renormalize(image):
     if image.min() < 0:
         image = (image + 1) / 2
-    return image.clip(0, 1)
+    return image
 
 
 class ClsReward(nn.Module): 
@@ -68,6 +53,7 @@ class ClsReward(nn.Module):
                 f"Unknown reward type: {reward_type}. "
                 f"Chose from {list(REWARD_FUNCTIONS.keys())}."
             )
+        self.reward_type = reward_type
         self.reward_fn = REWARD_FUNCTIONS[reward_type]
         self.target_classes = target_classes
         
@@ -78,17 +64,35 @@ class ClsReward(nn.Module):
         for param in self.parameters():
             param.requires_grad = False
 
-    def classify(self, latents):
+    def get_logits(self, latents):
         x_pred = self.generator(latents)
         x_pred = _renormalize(x_pred)
         logits = self.classifier(x_pred)
         return logits 
 
     def forward(self, latents):
-        logits = self.classify(latents)
+        logits = self.get_logits(latents)
         probas = logits.softmax(dim=1)
         rewards = probas[:, self.target_classes]
         return self.reward_fn(rewards)
+    
+    def log_reward(self, latents):
+        logits = self.get_logits(latents)
+        logits = logits - logits.max(dim=1, keepdim=True).values
+        peaked_logits = logits[:, self.target_classes]
+        
+        if self.reward_type == "sum":
+            return torch.logsumexp(peaked_logits, dim=1) \
+                   - torch.logsumexp(logits, dim=1)
+
+        elif self.reward_type == "max":
+            peaked_logits = peaked_logits.max(dim=1).values
+            return peaked_logits - torch.logsumexp(logits, dim=1)
+        else:
+            raise NotImplementedError(
+                "efficient log_reward is not implemented for this reward type."
+            )
+
 
     def state_dict(self):
         return {

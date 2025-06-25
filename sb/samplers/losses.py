@@ -200,18 +200,15 @@ def compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p, x, dt, t_max,
 
 
 def compute_fwd_vargrad_loss(fwd_model, bwd_model, log_p1, x, dt, t_max, 
-                             num_t_steps,p1_buffer = None, n_trajectories: int = 2, 
-                             clip_range: tuple[float, float] = (-10000.0, 10000.0)):
-    log = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p1, 
-                                             x, dt, t_max, num_t_steps, 
-                                             p1_buffer=p1_buffer)
-    # if clip_range is not None:
-    #     log = log.clip(*clip_range)
+                             num_t_steps,p1_buffer = None, n_trajectories: int = 2):
+    log = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p1, x, dt, 
+                                        t_max, num_t_steps, p1_buffer=p1_buffer)
+    if n_trajectories == 1:
+        return log.pow(2).mean()
 
     log = log.reshape(n_trajectories, -1)
-    loss = (log  - log.mean(0, keepdim=True).detach()).pow(2).mean()
+    return (log  - log.mean(0, keepdim=True).detach()).pow(2).mean()
     
-    return loss
 
 def compute_bwd_vargrad_loss(fwd_model, bwd_model, log_p0, x, dt, t_max,
                              num_t_steps, p0_buffer = None, n_trajectories: int = 2):
@@ -219,45 +216,3 @@ def compute_bwd_vargrad_loss(fwd_model, bwd_model, log_p0, x, dt, t_max,
                                         num_t_steps, p0_buffer=p0_buffer)
     log = log.reshape(n_trajectories, -1)
     return (log  - log.mean(0, keepdim=True).detach()).pow(2).mean()
-
-
-################################ LEGACY LOSS FUNCTIONS #################################
-
-def compute_bwd_ctb_loss(fwd_model, bwd_model, log_p0, x, dt, 
-                         t_max, num_t_steps, p0_buffer = None):
-    log_1 = compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p0, x, dt, t_max, 
-                                          num_t_steps, p0_buffer=p0_buffer)
-
-    log_2 = compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p0, x, dt, t_max, 
-                                          num_t_steps, p0_buffer=None)
-
-    return (log_1 - log_2).pow(2).mean()
-
-
-def compute_fwd_ctb_loss(fwd_model, bwd_model, log_p1, x, dt, 
-                         t_max, num_t_steps, p1_buffer = None):
-    log_1 = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p1, x, dt, t_max, 
-                                          num_t_steps, p1_buffer=p1_buffer)
-
-    log_2 = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p1, x, dt, t_max, 
-                                          num_t_steps, p1_buffer=None)
-
-    return (log_1 - log_2).pow(2).mean()
-
-
-def compute_fwd_ctb_loss_reuse_bwd(fwd_model, bwd_model, log_p1, x1, dt, 
-                                   t_max, num_t_steps, p1_buffer = None, 
-                                   n_trajectories: int = 2):
-    
-    log_1, x_0 = compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p1, x1, dt, 
-                                               t_max, num_t_steps, p0_buffer=None,
-                                               return_x=True, learn_bwd=False)
-    
-    x_0 = x_0.repeat(n_trajectories - 1, 1)
-    log_2 = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p1, x_0, dt, 
-                                          t_max, num_t_steps, p1_buffer=p1_buffer)
-    log_2 = log_2.reshape(n_trajectories - 1, -1) 
-    
-    log =  torch.cat([log_1.unsqueeze(0), log_2], dim=0)
-    loss = (log  - log.mean(0, keepdim=True).detach()).pow(2).mean()
-    return loss

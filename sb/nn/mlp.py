@@ -70,7 +70,6 @@ class SimpleNet(Module):
             t_embed = self.t_embed(t_embed)
             embeddings = torch.cat([embeddings, t_embed], dim=-1)
         
-        
         embeddings = self.main_body(embeddings)
         drift = self.drift_head(embeddings)
 

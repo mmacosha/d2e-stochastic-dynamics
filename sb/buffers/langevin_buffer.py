@@ -1,4 +1,3 @@
-from typing import Callable
 import math
 
 import torch
@@ -19,14 +18,14 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
             noise_start_ration: float = 0.0,
             anneal_value: float = 1.0,
             hmc_freq: int = 4,
-            reward_threshold: float = 0.8,
+            reward_proportional_sample: bool = False,
         ):
         super().__init__(size)
         self.anneal_value = anneal_value
         self.hmc_freq = hmc_freq
         self.noise_start_ration = noise_start_ration
         self.num_steps = num_steps
-        self.reward_threshold = reward_threshold
+        self.reward_proportional_sample = reward_proportional_sample
         
         self.sampler = sampler
         self.step_size = init_step_size
@@ -75,12 +74,17 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
     
     @torch.no_grad()
     def update(self, batch):
-        if self.reward_threshold > 0.0:
-            rewards = self.reward(batch)
-            batch = batch[rewards > self.reward_threshold]
+        super().update(batch)
 
-        self.buffer = self.buffer[-self.size + batch.size(0):]
-        self.buffer.extend(batch.split(1, 0))
+    def reward_proportional_sample(self, batch_size):
+        with torch.no_grad():
+            buffer = torch.cat(self.buffer, dim=0)
+            rwd = self.reward(buffer)
+            probas = rwd / rwd.sum()
+            chosen_idx = torch.multinomial(
+                probas, num_samples=batch_size, replacement=False
+            )
+            return buffer[chosen_idx]
 
     def sample(self, batch_size):
         if self.sampler == "legacy":
@@ -90,7 +94,11 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
             x = super().sample(batch_size)
         
         else:
-            x = super().sample(batch_size)
+            if self.reward_proportional_sample:
+                x = self.reward_proportional_sample(batch_size)
+            else:
+                x = super().sample(batch_size)
+            
             noise_size = int(batch_size * self.noise_start_ration)
             if noise_size > 0:
                 x[-noise_size:] = torch.randn(noise_size, x.size(1), device=x.device)
@@ -103,7 +111,15 @@ def compute_grad(fn, x):
     x_ = x.detach().clone().requires_grad_(True)
     o = fn(x_)
     o.sum().backward()
-    return o, x_.grad
+    grad = x_.grad
+    
+    if grad.isnan().any():
+        raise ValueError("Gradient contains NaN values.")
+
+    if grad.isinf().any():
+        raise ValueError("Gradient contains Inf values.")
+    
+    return o, grad
 
 
 def mala_correction(x, logp_x, grad_logp_x, y, logp_y, grad_logp_y, dt):

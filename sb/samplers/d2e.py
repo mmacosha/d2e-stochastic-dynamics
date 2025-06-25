@@ -44,7 +44,7 @@ class D2ESBConfig(base_class.SBConfig):
     num_langevin_steps: int = 20
     buffer_sampler: str = 'legacy'
     noise_start_ratio: float = 0.5
-    reward_threshold: float = 0.0
+    reward_proportional_sample: bool = False
     anneal_value: float = 0.1
     hmc_freq: int = 4
 
@@ -113,31 +113,15 @@ class D2ESB(base_class.SB):
                                 leave=False, desc=f'It {sb_iter} | Forward'):
             self.fwd_optim.zero_grad(set_to_none=True)
 
-            # if sb_iter == 0:
-            #     x0 = self.p0.sample(batch_size // n_trajectories).to(device)
-            #     x0 = x0.repeat(n_trajectories, 1)
-            #     loss = losses.compute_fwd_vargrad_loss(self.fwd_model, self.bwd_model, 
-            #                                            self.p1.log_density, x0, dt, 
-            #                                            t_max, n_steps, 
-            #                                            p1_buffer=self.p1_buffer,
-            #                                            n_trajectories=n_trajectories,
-            #                                            )
-            # else:
-            #     current_policy = self.config.policy
-            #     if current_policy in {"mix", "off_policy"} \
-            #         and sb_iter < self.config.start_mixed_from:
-            #         current_policy = "on_policy"
-            # if current_policy == "on_policy":
-
             if self.config.off_policy_fraction == 0 \
                 or sb_iter <= self.config.start_mixed_from:
                 x0 = self.p0.sample(batch_size // n_trajectories).to(device)
-            
+
             elif self.config.off_policy_fraction == 1.0:
                 x1 = self.p1_buffer.sample(batch_size // n_trajectories).to(device)
                 x0 = sutils.sample_trajectory(self.bwd_model, x1,"backward", 
                                               dt, n_steps, t_max, only_last=True)
-            # elif current_policy == "mix":
+
             else:
                 num_off_policy_samples = int(
                     self.config.off_policy_fraction * (batch_size // n_trajectories)

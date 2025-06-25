@@ -40,6 +40,7 @@ class SBConfig:
     batch_size: int = 512
     save_checkpoint_freq: int = 2
     restore_from: int = -1
+    watch_models: bool = True
 
     def __post__init__(self):
         assert self.dt * self.n_steps == self.t_max
@@ -114,6 +115,10 @@ class SB(ABC):
         with wandb.init(**experiment, config=self.config) as run:
             wandb.define_metric("forward_loss", step_metric="fwd_step")
             wandb.define_metric("backward_loss", step_metric="bwd_step")
+
+            if self.config.watch_models:
+                wandb.watch(self.fwd_model, log="all", log_freq=500)
+                # wandb.watch(self.bwd_model, log="all", log_freq=250)
 
             self.resotre_from_last_checkpoint(run)
             for sb_iter in trange(self.config.num_sb_steps, leave=False, 
