@@ -1,0 +1,8 @@
+  name: cls_reward_dist
+  args: 
+    generator_type: cifar10-gan-z256
+    classifier_type: cifar10-cls
+    prior_dim: 256
+    target_classes: [5]
+    reward_type: sum
+    device: ${sampler.device}

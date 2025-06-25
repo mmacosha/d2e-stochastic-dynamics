@@ -5,7 +5,6 @@ device: cuda:0
 save_checkpoint_freq: 5
 log_fwd_freq: 1
 log_bwd_freq: 1
-watch_models: false
 
 # training
 batch_size: 512

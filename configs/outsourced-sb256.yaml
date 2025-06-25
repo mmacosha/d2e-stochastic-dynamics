@@ -6,17 +6,16 @@ sampler:
   save_checkpoint_freq: 5
   log_fwd_freq: 1
   log_bwd_freq: 1
-  watch_models: false
   
   # training
-  batch_size: 256
+  batch_size: 512
   matching_method: ll
   backward_first: true
   num_sb_steps: 100
   fwd_optim_lr: 5e-4
   bwd_optim_lr: 5e-4
   num_fwd_steps: 2000
-  num_bwd_steps: 500
+  num_bwd_steps: 100
   fwd_ema_decay: 0.0
   bwd_ema_decay: 0.0
 
@@ -29,17 +28,17 @@ sampler:
   # policy
   n_trajectories: 2
   start_mixed_from: 0
-  off_policy_fraction: 0.2
+  off_policy_fraction: 0.4
   
   # bufferx
   buffer_type: langevin
-  buffer_size: 1024
-  init_step_size: 0.01
-  num_langevin_steps: 10
+  buffer_size: 2048
   buffer_sampler: ula2
-  noise_start_ratio: 0.0
-  reward_proportional_sample: false
+  init_step_size: 0.5
   anneal_value: 0.1
+  num_langevin_steps: 10
+  noise_start_ratio: 0.5
+  reward_proportional_sample: true
   hmc_freq: 4
 
 exp:
