@@ -1,0 +1,22 @@
+defaults:
+  - _self_
+  - /data@data.p0: d2normal
+  - /data@data.p1: 8gaussians
+  - /models@models.fwd: d64-tv
+  - /models@models.bwd: d64-tv
+  - sampler: d2e_cifar10
+
+exp:
+  id: null
+  resume: allow
+  name: d2d-sb-ablations
+  project: sb-ablations
+  mode: online
+
+hydra:
+  run:
+    dir: "."
+  output_subdir: null
+  job_logging:
+    disable_existing_loggers: true
+  verbose: false

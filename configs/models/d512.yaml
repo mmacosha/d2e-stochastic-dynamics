@@ -1,0 +1,7 @@
+t_emb_size: 128
+x_emb_size: 512
+in_dim: 512
+out_dim: 512
+n_main_body_layers: 6
+predict_log_var: true
+use_residual: false
