@@ -1,10 +1,10 @@
 defaults:
   - _self_
-  - /data@data.p_0: d256normal
-  - /data@data.p_1: cifar10-gan-d256
-  - /models@models.fwd: d256
-  - /models@models.bwd: d256
-  - sampler: d2e-cifar10
+  - /data@data.p_0: d512normal
+  - /data@data.p_1: cifar10-sg3
+  - /models@models.fwd: d512
+  - /models@models.bwd: d512
+  - sampler: d2e-cifar10-sg3
 
 exp:
   id: null

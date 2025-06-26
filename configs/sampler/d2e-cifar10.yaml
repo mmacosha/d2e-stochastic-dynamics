@@ -25,7 +25,7 @@ t_max: 0.8
 n_steps: 20
 
 # policy
-n_trajectories: 2
+n_trajectories: 1
 start_mixed_from: 0
 off_policy_fraction: 0.4
 
