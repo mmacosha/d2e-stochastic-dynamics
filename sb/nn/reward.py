@@ -76,12 +76,34 @@ class ClsReward(nn.Module):
             'all_probas': all_probas,
             'classes': classes,
             'images': x_pred    
-        } 
+        }
+    
+    def get_reward(self, probas):
+        rewards = probas[:, self.target_classes]
+        return self.reward_fn(rewards)
+
+    def get_precision(self, classes):
+        target_classes = torch.tensor(self.target_classes).view(-1, 1)
+        precision = (classes == target_classes.to(classes.device))
+        return precision.float().mean()
 
     def reward(self, latents):
         probas = self(latents)['all_probas']
         rewards = probas[:, self.target_classes]
         return self.reward_fn(rewards)
+    
+    def get_reward_and_precision(self, latents=None, outputs=None):
+        if latents is None and outputs is None:
+            raise ValueError(
+                "Either latents or outputs must be provided."
+            )
+        if latents is not None:
+            outputs = self(latents)
+
+        reward = self.get_reward(outputs['all_probas'])
+        precision = self.get_precision(outputs['classes'])
+
+        return reward, precision
     
     def log_reward(self, latents):
         logits = self(latents)['logits']

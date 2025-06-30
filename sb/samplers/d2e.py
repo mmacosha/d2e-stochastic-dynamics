@@ -9,7 +9,7 @@ from torchvision.utils import make_grid
 
 import sb.utils as utils
 import sb.metrics as metrics
-from sb.buffers import ReplayBuffer, LangevinReplayBuffer
+from sb.buffers import ReplayBuffer, LangevinReplayBuffer, DecoupledLangevinBuffer
 
 from . import losses
 from . import utils as sutils
@@ -41,6 +41,8 @@ class D2ESBConfig(base_class.SBConfig):
 
     # Buffer parameters
     buffer_type: str = 'simple'
+    langevin_freq: int = 250
+    ema_lambda: float = 0.0
     buffer_size: int = 512
     init_step_size: float = 0.1
     num_langevin_steps: int = 20
@@ -65,7 +67,7 @@ class D2ESB(base_class.SB):
         super().__init__(fwd_model, bwd_model, p0, p1, config)
         
         if config.buffer_type == 'simple':
-            self.p1_buffer = ReplayBuffer(config.buffer_size)
+            self.p1_buffer = ReplayBuffer(config.buffer_size, config.device)
         elif config.buffer_type == "langevin":
             self.p1_buffer = LangevinReplayBuffer(
                 size=config.buffer_size, 
@@ -75,7 +77,22 @@ class D2ESB(base_class.SB):
                 sampler=config.buffer_sampler,
                 noise_start_ration=config.noise_start_ratio,
                 anneal_value=config.anneal_value,
-                hmc_freq=config.hmc_freq
+                hmc_freq=config.hmc_freq,
+                device=config.device,
+            )
+        elif config.buffer_type == "decoupled_langevin":
+            self.p1_buffer = DecoupledLangevinBuffer(
+                langevin_freq=config.langevin_freq,
+                size=config.buffer_size, 
+                p1=self.p1, 
+                init_step_size=config.init_step_size, 
+                num_steps=config.num_langevin_steps,
+                sampler=config.buffer_sampler,
+                noise_start_ration=config.noise_start_ratio,
+                anneal_value=config.anneal_value,
+                hmc_freq=config.hmc_freq,
+                device=config.device,
+                reward_proportional_sample=config.reward_proportional_sample
             )
         else:
             raise ValueError(f"Buffer is unknow: {config.buffer_type}")
@@ -92,8 +109,9 @@ class D2ESB(base_class.SB):
 
             x0 = self.p0.sample(self.config.batch_size).to(self.config.device)
             fwd_model = self.reference_process if sb_iter == 0 else self.fwd_model
-            loss = losses.compute_bwd_tlm_loss(fwd_model, self.bwd_model, 
-                                               x0, dt, t_max, n_steps)
+            loss = losses.compute_bwd_tlm_loss(
+                fwd_model, self.bwd_model, x0, dt, t_max, n_steps
+            )
                 
             self.bwd_optim.step()
             self.bwd_model_ema.update()
@@ -117,26 +135,33 @@ class D2ESB(base_class.SB):
         for step_iter in trange(self.config.num_fwd_steps, 
                                 leave=False, desc=f'It {sb_iter} | Forward'):
             self.fwd_optim.zero_grad(set_to_none=True)
+            
+            _batch_size = batch_size // n_trajectories
+            x0 = self.p0.sample(_batch_size).to(device)
+            hdim = x0.size(1)
 
-            if self.config.off_policy_fraction == 0 \
-                or sb_iter <= self.config.start_mixed_from:
-                x0 = self.p0.sample(batch_size // n_trajectories).to(device)
+            if sb_iter > 30:
+                self.config.off_policy_fraction = 0.0
 
-            elif self.config.off_policy_fraction == 1.0:
-                x1 = self.p1_buffer.sample(batch_size // n_trajectories).to(device)
-                x0 = sutils.sample_trajectory(self.bwd_model, x1,"backward", 
-                                              dt, n_steps, t_max, only_last=True)
+            if self.config.buffer_type == "decoupled_langevin" \
+                and self.config.off_policy_fraction > 0.0:
+                self.p1_buffer.run_langevin(hdim)
 
-            else:
-                num_off_policy_samples = int(
-                    self.config.off_policy_fraction * (batch_size // n_trajectories)
+            if self.config.off_policy_fraction == 1.0:
+                x1 = self.p1_buffer.sample(_batch_size, hdim).to(device)
+                x0 = sutils.sample_trajectory(
+                    self.bwd_model, x1,"backward", dt, n_steps, t_max, only_last=True
                 )
-                x1 = self.p1_buffer.sample(num_off_policy_samples).to(device)
-                x0_off = sutils.sample_trajectory(self.bwd_model, x1,"backward", 
-                                                  dt, n_steps, t_max, only_last=True)
-                x0_on = self.p0.sample(
-                    batch_size // n_trajectories - num_off_policy_samples
-                ).to(device)
+
+            elif self.config.off_policy_fraction > 0:
+                num_off_policy_samples = int(
+                    self.config.off_policy_fraction * (_batch_size)
+                )
+                x1 = self.p1_buffer.sample(num_off_policy_samples, hdim).to(device)
+                x0_off = sutils.sample_trajectory(
+                    self.bwd_model, x1,"backward", dt, n_steps, t_max, only_last=True
+                )
+                x0_on = x0[:_batch_size - num_off_policy_samples].to(device)
                 x0 = torch.cat([x0_off, x0_on], dim=0)
 
             if n_trajectories == 1:
@@ -153,8 +178,9 @@ class D2ESB(base_class.SB):
                                                     n_trajectories=n_trajectories)
             with torch.no_grad():
                 x0 = self.p0.sample(self.config.val_batch_size).to(device)
-                x1 = sutils.sample_trajectory(self.fwd_model, x0, "forward", 
-                                              dt, n_steps, t_max, only_last=True)
+                x1 = sutils.sample_trajectory(
+                    self.fwd_model, x0, "forward", dt, n_steps, t_max, only_last=True
+                )
                 log_reward = self.p1.reward.log_reward(x1).mean()
 
             loss.backward()
@@ -200,12 +226,8 @@ class D2ESB(base_class.SB):
             
             # log image from generated latents
             x1_pred = sutils.sample_trajectory(self.fwd_model, x0, 'forward', 
-                                            dt, n_steps, t_max, only_last=True)
+                                               dt, n_steps, t_max, only_last=True)
             
-            # pred_img = self.p1.reward.generator(x1_pred).clip(-1, 1) * 0.5 + 0.5
-            # logits = self.p1.reward.classifier(pred_img).cpu()
-            # (p, c) = logits.softmax(dim=1).max(dim=1)
-
             output = self.p1.reward(x1_pred)
             pred_img_grid = make_grid(
                 output["images"][:36].clip(0, 1).cpu().view(image_shape), 
@@ -216,11 +238,7 @@ class D2ESB(base_class.SB):
                 probas_classes=(output["probas"][:36], output["classes"][:36]), 
                 n_col=6, figsize=(18, 18)
             )
-            
-            # compute precision
-            c = output["classes"].cpu()
-            target_classes = torch.tensor(self.p1.reward.target_classes).view(-1, 1)
-            precision = (c == target_classes.to(c.device)).sum() / c.size(0)
+            precision = self.p1.reward.get_precision(output["classes"])
 
             logging_dict = logging_dict | {
                 "images/x1_sample_annotated": wandb.Image(fig1),
@@ -229,31 +247,27 @@ class D2ESB(base_class.SB):
                 "metrics/precision": precision,
             }
 
-            # log images from buffer latents
-            if sb_iter > 0:
-                with torch.enable_grad():
-                    x_buffer = self.p1_buffer.sample(36).to(self.config.device)
-                
-                # buffer_img = self.p1.reward.generator(x_buffer).clip(-1, 1) * 0.5 + 0.5
-                # logits = self.p1.reward.classifier(buffer_img).cpu()
-                # (p, c) = logits.softmax(dim=1).max(dim=1)
-                
-                buffer_output = self.p1.reward(x_buffer)
-                fig2 = utils.plot_annotated_images(
-                    buffer_output["images"][:36].clip(0, 1).cpu().view(image_shape),
-                    (buffer_output["probas"][:36], buffer_output["classes"][:36]), 
-                    n_col=6, figsize=(18, 18)
-                )
+            with torch.enable_grad():
+                x_buffer = self.p1_buffer.sample(self.config.buffer_size)
+                x_buffer = x_buffer.to(self.config.device)
+            
+            buffer_output = self.p1.reward(x_buffer)
+            fig2 = utils.plot_annotated_images(
+                buffer_output["images"][:36].clip(0, 1).cpu().view(image_shape),
+                (buffer_output["probas"][:36], buffer_output["classes"][:36]), 
+                n_col=6, figsize=(18, 18)
+            )
+            
+            buffer_rwd, buffer_prc = self.p1.reward.get_reward_and_precision(
+                outputs=buffer_output
+            )
 
-                # compute precision for buffer images
-                c = output["classes"].cpu()
-                target_classes = torch.tensor(self.p1.reward.target_classes).view(-1, 1)
-                buffer_precision = (c == target_classes.to(c.device)).sum() / c.size(0)
-
-                logging_dict = logging_dict | {
-                    "images/buffer_samples": wandb.Image(fig2),
-                    "metrics/buffer_precision": buffer_precision,
-                }
+            logging_dict = logging_dict | {
+                "images/buffer_samples": wandb.Image(fig2),
+                "metrics/buffer_precision": buffer_prc,
+                "metrics/buffer_reward": buffer_rwd,
+            }
+        
         elif self.config.logging_data == "2d":
             trajectory, timesteps = sutils.sample_trajectory(
                 self.fwd_model, x0, "forward", dt, n_steps, t_max, 

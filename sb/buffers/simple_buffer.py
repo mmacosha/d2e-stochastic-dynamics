@@ -9,9 +9,8 @@ class ReplayBuffer:
         self.buffer = []
 
     @torch.no_grad()
-    def sample(self, batch_size):
-        batch = random.choices(self.buffer, k=batch_size)
-        return torch.cat(batch, dim=0)
+    def sample(self, batch_size, *args, **kwargs):
+        return torch.cat(random.choices(self.buffer, k=batch_size), dim=0)
 
     @torch.no_grad()
     def update(self, batch):
