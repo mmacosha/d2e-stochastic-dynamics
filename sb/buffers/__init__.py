@@ -1,2 +1,3 @@
 from sb.buffers.simple_buffer import ReplayBuffer
 from sb.buffers.langevin_buffer import LangevinReplayBuffer
+from sb.buffers.decoupled_langevin import DecoupledLangevinBuffer
