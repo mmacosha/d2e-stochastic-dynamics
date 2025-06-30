@@ -1,6 +1,8 @@
 import torch
 from sb.nn import utils
 
+from .losses import _make_bwd_sde_step, _make_fwd_sde_step
+
 
 def extract_into_tensor(tensor, shape):
     num_expand_dims = len(shape) - 1
@@ -48,11 +50,14 @@ def sample_trajectory(model, x_start, direction, dt, n_steps, t_max,
         timesteps.append(f"{t_step.item() + shift:.3f}")
         
         t = torch.ones(x_start.size(0), device=x_start.device) * t_step
-        # mean, log_var = get_mean_log_var(model, trajectory[-1], t, dt)
-        # x_new = mean + torch.randn_like(mean) * log_var.exp().sqrt()
-
         mean, log_var = get_mean_log_var(model, trajectory[-1], t, dt)
         noise_std = log_var.exp().sqrt()
+
+        if matching_method == "sde":
+            if direction == "backward":
+                x_new = _make_bwd_sde_step(mean, trajectory[-1], dt, 0.04, noise_std)
+            else:
+                x_new = _make_fwd_sde_step(mean, trajectory[-1], dt, 0.04, noise_std)
 
         if matching_method in {"ll", "mean"}:
             x_new = mean + torch.randn_like(mean) * noise_std

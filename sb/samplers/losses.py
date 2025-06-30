@@ -1,3 +1,4 @@
+import math
 import torch
 
 from . import utils
@@ -25,6 +26,30 @@ def log_normal_density(x, mean, log_var):
     mean = mean.view(batch_size, -1)
     log_var = log_var.view(batch_size, -1)
     return - 0.5 * (log_var + torch.exp(- log_var) * (mean - x).pow(2)).sum(-1)
+
+
+def _compute_z_div_z(model, x, t, g):
+    x.requires_grad_(True)
+    z = model(x, t)
+    e = torch.randn_like(x)
+    
+    z_div = torch.autograd.grad(
+        g * z, x, grad_outputs=e, create_graph=True
+    )[0]
+    z_div = z_div * e
+    return z, z_div
+
+
+def _make_fwd_sde_step(z, xt, dt, alpha, g):
+    drift = alpha * xt + g * z
+    diff = g * math.sqrt(dt)
+    return xt + drift * dt + diff * torch.randn_like(xt)
+
+
+def _make_bwd_sde_step(z, xt, dt, alpha, g):
+    drift = alpha * xt - g * z
+    diff = g * math.sqrt(dt)
+    return xt - drift * dt + diff * torch.randn_like(xt)
 
 
 def compute_fwd_tlm_loss(fwd_model, bwd_model, x1, dt, t_max, n_steps, 
@@ -57,12 +82,20 @@ def compute_fwd_tlm_loss(fwd_model, bwd_model, x1, dt, t_max, n_steps,
 
                 bwd_mean_new, _ = utils.get_mean_log_var(bwd_model, xt_m_dt, t, dt)
                 target = xt_m_dt + bwd_mean - (xt_m_dt + bwd_mean_new)
+            
+            elif matching_method == "sde":
+                z, bwd_log_var = utils.get_mean_log_var(bwd_model, xt, t, dt)
+                g = bwd_log_var.exp().sqrt()
+                xt_m_dt = _make_bwd_sde_step(z, xt, dt, 0.04, g)
 
-        fwd_mean, fwd_log_var = utils.get_mean_log_var(fwd_model, xt_m_dt, t - dt, dt)
-        
-        if matching_method == "ll":
+        if matching_method == "sde":
+            z_hat, z_div = _compute_z_div_z(fwd_model, xt_m_dt, t - dt, g)
+            loss = (z_hat * (0.5 * z_hat + z) + z_div).sum(1).mean()
+        elif matching_method == "ll":
+            fwd_mean, fwd_log_var = utils.get_mean_log_var(fwd_model, xt_m_dt, t - dt, dt)
             loss = - log_normal_density(xt, fwd_mean, fwd_log_var)
         else:
+            fwd_mean, fwd_log_var = utils.get_mean_log_var(fwd_model, xt_m_dt, t - dt, dt)
             loss = torch.nn.functional.mse_loss(xt, target)
         
         if backward:
@@ -113,11 +146,19 @@ def compute_bwd_tlm_loss(fwd_model, bwd_model, x_0, dt, t_max, n_steps,
                 )
                 target = xt_m_dt + fwd_mean - (xt + fwd_mean_new)
 
-        bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, xt, t, dt)
-        
-        if matching_method == "ll":
+            elif matching_method == "sde":
+                z, fwd_log_var = utils.get_mean_log_var(fwd_model, xt_m_dt, t - dt, dt)
+                g = fwd_log_var.exp().sqrt()
+                xt = _make_fwd_sde_step(z, xt_m_dt, dt, 0.04, g)
+
+        if matching_method == "sde":
+            z_hat, z_div = _compute_z_div_z(bwd_model, xt, t, g)
+            loss = (z_hat * (0.5 * z_hat + z) + z_div).sum(1).mean()
+        elif matching_method == "ll":
+            bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, xt, t, dt)
             loss = - log_normal_density(xt_m_dt, bwd_mean, bwd_log_var)
         else:
+            bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, xt, t, dt)
             loss = torch.nn.functional.mse_loss(bwd_mean, target)
         
         assert ~loss.isnan().any(), f"Loss is NaN on {t_step=}"
