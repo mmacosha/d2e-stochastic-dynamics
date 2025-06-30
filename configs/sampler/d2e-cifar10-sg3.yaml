@@ -31,11 +31,13 @@ off_policy_fraction: 0.4
 
 # bufferx
 buffer_type: langevin
+langevin_freq: 250
 buffer_size: 256
 buffer_sampler: ula2
 init_step_size: 0.5
 anneal_value: 0.1
-num_langevin_steps: 10
+ema_lambda: 0.0
+num_langevin_steps: 5
 noise_start_ratio: 0.5
 reward_proportional_sample: true
 hmc_freq: 4

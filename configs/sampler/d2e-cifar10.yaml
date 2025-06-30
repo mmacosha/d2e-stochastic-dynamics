@@ -27,15 +27,16 @@ n_steps: 20
 # policy
 n_trajectories: 1
 start_mixed_from: 0
-off_policy_fraction: 0.4
+off_policy_fraction: 0.8
 
 # bufferx
-buffer_type: langevin
-buffer_size: 2048
+buffer_type: decoupled_langevin
+langevin_freq: 500
+buffer_size: 3072
 buffer_sampler: ula2
 init_step_size: 0.5
 anneal_value: 0.1
-num_langevin_steps: 10
+num_langevin_steps: 100
 noise_start_ratio: 0.5
 reward_proportional_sample: true
 hmc_freq: 4

@@ -1,0 +1,10 @@
+buffer_type: langevin
+buffer_size: 3072
+ema_lambda: 0.0
+buffer_sampler: ula2
+init_step_size: 0.5
+anneal_value: 0.1
+num_langevin_steps: 100
+noise_start_ratio: 0.5
+reward_proportional_sample: true
+hmc_freq: 4
