@@ -3,8 +3,8 @@ import torch
 
 
 class ReplayBuffer:
-    def __init__(self, size, update_fraction=1.0):
-        self.size = size
+    def __init__(self, buffer_size, update_fraction=1.0, *args, **kwargs):
+        self.size = buffer_size
         self.update_fraction = update_fraction
         self.buffer = []
 

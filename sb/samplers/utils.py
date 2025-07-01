@@ -4,11 +4,6 @@ from sb.nn import utils
 from .losses import _make_bwd_sde_step, _make_fwd_sde_step
 
 
-def extract_into_tensor(tensor, shape):
-    num_expand_dims = len(shape) - 1
-    return tensor.view([-1] + [1 for _ in range(num_expand_dims)])
-
-
 def get_mean_log_var(model, x, t, dt):
     log_var = torch.log(torch.ones_like(x) * 2.0 * dt)
     output = model(x, t)
@@ -16,21 +11,14 @@ def get_mean_log_var(model, x, t, dt):
     if output.contains('log_var'):
         log_var = log_var + output.log_var
         if log_var.isnan().any():
-            print(log_var)
-            assert 0, "log_var is NaN"
+            raise ValueError("Log var is Nan")
     
     if output.drift.isnan().any():
-        print(output.drift)
-        assert 0, "drift is NaN"
+        raise ValueError("Drift is Nan")
     
 
     mean = x + output.drift * dt
     return mean, log_var
-
-
-def make_euler_maruyama_step(model, x, t, dt):
-    mean, log_var = get_mean_log_var(model, x, t, dt)
-    return mean + torch.randn_like(mean) * log_var.exp().sqrt()
 
 
 @torch.no_grad()
@@ -55,9 +43,9 @@ def sample_trajectory(model, x_start, direction, dt, n_steps, t_max,
 
         if matching_method == "sde":
             if direction == "backward":
-                x_new = _make_bwd_sde_step(mean, trajectory[-1], dt, 0.04, noise_std)
+                x_new = _make_bwd_sde_step(mean, trajectory[-1], dt, 1.42, noise_std)
             else:
-                x_new = _make_fwd_sde_step(mean, trajectory[-1], dt, 0.04, noise_std)
+                x_new = _make_fwd_sde_step(mean, trajectory[-1], dt, 1.42, noise_std)
 
         if matching_method in {"ll", "mean"}:
             x_new = mean + torch.randn_like(mean) * noise_std

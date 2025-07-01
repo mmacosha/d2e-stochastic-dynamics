@@ -86,7 +86,7 @@ def compute_fwd_tlm_loss(fwd_model, bwd_model, x1, dt, t_max, n_steps,
             elif matching_method == "sde":
                 z, bwd_log_var = utils.get_mean_log_var(bwd_model, xt, t, dt)
                 g = bwd_log_var.exp().sqrt()
-                xt_m_dt = _make_bwd_sde_step(z, xt, dt, 0.04, g)
+                xt_m_dt = _make_bwd_sde_step(z, xt, dt, 1.42, g)
 
         if matching_method == "sde":
             z_hat, z_div = _compute_z_div_z(fwd_model, xt_m_dt, t - dt, g)
@@ -141,6 +141,7 @@ def compute_bwd_tlm_loss(fwd_model, bwd_model, x_0, dt, t_max, n_steps,
                 )
                 noise_std = fwd_log_var.exp().sqrt()
                 xt = xt_m_dt + fwd_mean + torch.randn_like(fwd_mean) * noise_std
+                
                 fwd_mean_new, _ = utils.get_mean_log_var(
                     fwd_model, xt, t - dt, dt
                 )
@@ -149,7 +150,7 @@ def compute_bwd_tlm_loss(fwd_model, bwd_model, x_0, dt, t_max, n_steps,
             elif matching_method == "sde":
                 z, fwd_log_var = utils.get_mean_log_var(fwd_model, xt_m_dt, t - dt, dt)
                 g = fwd_log_var.exp().sqrt()
-                xt = _make_fwd_sde_step(z, xt_m_dt, dt, 0.04, g)
+                xt = _make_fwd_sde_step(z, xt_m_dt, dt, 1.42, g)
 
         if matching_method == "sde":
             z_hat, z_div = _compute_z_div_z(bwd_model, xt, t, g)

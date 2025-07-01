@@ -131,9 +131,9 @@ class SimpleGaussian(base.Dataset):
 @registry.add(name="cls_reward_dist")
 class ClsRewardDist(base.Dataset):
     def __init__(self, generator_type: str, classifier_type: str, prior_dim: int, 
-                 target_classes, reward_type: str, device: str):
+                 reward_dir: str, target_classes, reward_type: str, device: str):
         self.reward = ClsReward.build_reward(
-            generator_type, classifier_type, target_classes, reward_type
+            generator_type, classifier_type, target_classes, reward_type, reward_dir
         )
         self.reward.to(device).eval()
         self.prior = SimpleGaussian(0, 1, dim=prior_dim, device=device)

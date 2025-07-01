@@ -123,10 +123,6 @@ class SB(ABC):
                 artifact.add_file(cfg_path)
                 wandb.log_artifact(artifact)
 
-            if self.config.watch_models:
-                wandb.watch(self.fwd_model, log="all", log_freq=500)
-                # wandb.watch(self.bwd_model, log="all", log_freq=250)
-
             self.resotre_from_last_checkpoint(run)
             for sb_iter in trange(self.config.num_sb_steps, leave=False, 
                                   desc="SB training"):

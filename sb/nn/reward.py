@@ -136,21 +136,25 @@ class ClsReward(nn.Module):
     @classmethod
     def build_reward(
         cls, generator_type: str, classifier_type: str, 
-        target_classes, reward_type='sum'):        
+        target_classes, reward_type='sum', reward_dir="./"):        
         if generator_type == 'cifar10-stylegan':
             generator = StyleGanWrapper(
-                './rewards/cifar10/stylegan2-cifar10-32x32.pkl'
+                f'{reward_dir}/rewards/cifar10/stylegan2-cifar10-32x32.pkl'
             )
         
         elif generator_type in {"mnist-gan-z10", "mnist-gan-z50"}:
-            ckpt = torch.load(f'./rewards/mnist/{generator_type}.pt', 
-                              map_location='cpu', weights_only=True)
+            ckpt = torch.load(
+                f'{reward_dir}/rewards/mnist/{generator_type}.pt', 
+                map_location='cpu', weights_only=True
+            )
             generator = MnistGen(**ckpt["config"])
             generator.load_state_dict(ckpt["state_dict"])
 
         elif generator_type in {'cifar10-gan-z50', 'cifar10-gan-z100', 'cifar10-gan-z256'}:
-            ckpt = torch.load(f'./rewards/cifar10/{generator_type}.pt',
-                               map_location='cpu', weights_only=True)
+            ckpt = torch.load(
+                f'{reward_dir}/rewards/cifar10/{generator_type}.pt',
+                map_location='cpu', weights_only=True
+            )
             generator = CifarGen(**ckpt['config'], inference=True)
             generator.load_state_dict(ckpt['state_dict'])
         
@@ -161,13 +165,17 @@ class ClsReward(nn.Module):
 
         if classifier_type == 'cifar10-cls':
             classifier = CifarCls()
-            ckpt = torch.load('./rewards/cifar10/cifar10-cls.pt', 
-                              map_location='cpu', weights_only=True)
+            ckpt = torch.load(
+                f'{reward_dir}/rewards/cifar10/cifar10-cls.pt', 
+                map_location='cpu', weights_only=True
+            )
             classifier.load_state_dict(ckpt)
         
         elif classifier_type == 'mnist-cls':
-            ckpt = torch.load('./rewards/mnist/mnist-cls.pth', 
-                              map_location='cpu', weights_only=True)
+            ckpt = torch.load(
+                f'{reward_dir}/rewards/mnist/mnist-cls.pth', 
+                map_location='cpu', weights_only=True
+            )
             classifier = MnistCLS()
             classifier.load_state_dict(ckpt)
 

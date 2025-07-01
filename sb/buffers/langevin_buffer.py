@@ -1,6 +1,9 @@
 import math
 
 import torch
+
+import sys
+sys.path.append('external/hamiltorch')
 import hamiltorch
 
 from tqdm.auto import trange
@@ -63,10 +66,10 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
     _sampler = {'legacy', 'ula', 'ula2', 'mala', 'hmc'}
     def __init__(
             self, 
-            size: int, 
+            buffer_size: int, 
             p1, 
             init_step_size: float, 
-            num_steps: int,
+            num_langevin_steps: int,
             ema_lambda: float = 0,
             sampler: str = 'ula',
             noise_start_ration: float = 0.0,
@@ -74,15 +77,16 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
             hmc_freq: int = 4,
             device = 'cpu',
             reward_proportional_sample: bool = False,
+            *args, **kwargs
         ):
-        super().__init__(size)
+        super().__init__(buffer_size)
         self.device = device
         self.lmbda = ema_lambda
 
         self.anneal_value = anneal_value
         self.hmc_freq = hmc_freq
         self.noise_start_ration = noise_start_ration
-        self.num_steps = num_steps
+        self.num_steps = num_langevin_steps
         self.reward_proportional_sample = reward_proportional_sample
         
         self.sampler = sampler

@@ -46,6 +46,5 @@ class DecoupledLangevinBuffer(LangevinReplayBuffer):
         
         self.langevin_buffer = x
         
-        # with torch.no_grad():
-            # rwd = self.reward.reward(x)
-        self.buffer_reward_probas = torch.ones(self.size, device=self.devcie) / self.size
+        self.buffer_reward_probas = \
+            torch.ones(self.size, device=self.device) / self.size

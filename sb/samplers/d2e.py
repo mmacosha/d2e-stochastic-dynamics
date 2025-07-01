@@ -40,6 +40,7 @@ class D2ESBConfig(base_class.SBConfig):
     watch_models: bool = False
 
     # Buffer parameters
+    reward_dir: str = './'
     buffer_type: str = 'simple'
     langevin_freq: int = 250
     ema_lambda: float = 0.0
@@ -63,39 +64,26 @@ class D2ESBConfig(base_class.SBConfig):
 
 
 class D2ESB(base_class.SB):
-    def __init__(self, fwd_model, bwd_model, p0, p1, config):
+    def __init__(self, fwd_model, bwd_model, p0, p1, config, buffer_config):
         super().__init__(fwd_model, bwd_model, p0, p1, config)
+        self.buffer_config = buffer_config
         
-        if config.buffer_type == 'simple':
-            self.p1_buffer = ReplayBuffer(config.buffer_size, config.device)
-        elif config.buffer_type == "langevin":
+        if buffer_config.buffer_type == 'simple':
+            self.p1_buffer = ReplayBuffer(**config.buffer, device=self.config.device)
+        elif buffer_config.buffer_type == "langevin":
             self.p1_buffer = LangevinReplayBuffer(
-                size=config.buffer_size, 
                 p1=self.p1, 
-                init_step_size=config.init_step_size, 
-                num_steps=config.num_langevin_steps,
-                sampler=config.buffer_sampler,
-                noise_start_ration=config.noise_start_ratio,
-                anneal_value=config.anneal_value,
-                hmc_freq=config.hmc_freq,
-                device=config.device,
+                device=self.config.device,
+                **buffer_config,
             )
-        elif config.buffer_type == "decoupled_langevin":
+        elif buffer_config.buffer_type == "decoupled_langevin":
             self.p1_buffer = DecoupledLangevinBuffer(
-                langevin_freq=config.langevin_freq,
-                size=config.buffer_size, 
                 p1=self.p1, 
-                init_step_size=config.init_step_size, 
-                num_steps=config.num_langevin_steps,
-                sampler=config.buffer_sampler,
-                noise_start_ration=config.noise_start_ratio,
-                anneal_value=config.anneal_value,
-                hmc_freq=config.hmc_freq,
                 device=config.device,
-                reward_proportional_sample=config.reward_proportional_sample
+                **buffer_config
             )
         else:
-            raise ValueError(f"Buffer is unknow: {config.buffer_type}")
+            raise ValueError(f"Buffer is unknow: {buffer_config.buffer_type}")
 
     def train_backward_step(self, sb_iter, run):
         dt = self.config.dt
@@ -140,10 +128,7 @@ class D2ESB(base_class.SB):
             x0 = self.p0.sample(_batch_size).to(device)
             hdim = x0.size(1)
 
-            if sb_iter > 30:
-                self.config.off_policy_fraction = 0.0
-
-            if self.config.buffer_type == "decoupled_langevin" \
+            if self.buffer_config.buffer_type == "decoupled_langevin" \
                 and self.config.off_policy_fraction > 0.0:
                 self.p1_buffer.run_langevin(hdim)
 
