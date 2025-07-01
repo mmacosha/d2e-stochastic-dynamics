@@ -5,6 +5,7 @@ defaults:
   - /models@models.fwd: d512
   - /models@models.bwd: d512
   - sampler: d2e-cifar10-sg3
+  - buffer: decoupled_langevin
 
 exp:
   id: null

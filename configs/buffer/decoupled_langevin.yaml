@@ -1,11 +1,11 @@
 buffer_type: decoupled_langevin
-langevin_freq: 250
-buffer_size: 256
+langevin_freq: 500
+buffer_size: 512
 buffer_sampler: ula2
-init_step_size: 0.5
+init_step_size: 0.07
 anneal_value: 0.1
-ema_lambda: 0.0
-num_langevin_steps: 5
+ema_lambda: 0.3
+num_langevin_steps: 300
 noise_start_ratio: 0.5
 reward_proportional_sample: true
 hmc_freq: 4

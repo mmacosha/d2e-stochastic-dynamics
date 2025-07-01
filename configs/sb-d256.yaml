@@ -5,6 +5,7 @@ defaults:
   - /models@models.fwd: d256
   - /models@models.bwd: d256
   - sampler: d2e-cifar10
+  - buffer: langevin
 
 exp:
   id: null

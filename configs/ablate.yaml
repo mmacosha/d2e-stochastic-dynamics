@@ -5,6 +5,7 @@ defaults:
   - /models@models.fwd: d64-tv
   - /models@models.bwd: d64-tv
   - sampler: d2d_2d
+  - buffer: simple
 
 exp:
   id: null

@@ -20,6 +20,6 @@ train_log_var: true
 
 # ref process
 alpha: 1.42
-dt: 0.004
-t_max: 0.08
+dt: 0.01
+t_max: 0.2
 n_steps: 20
