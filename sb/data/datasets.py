@@ -141,5 +141,5 @@ class ClsRewardDist(base.Dataset):
     def sample(self, *args):
         raise NotImplementedError
 
-    def log_density(self, x):
-        return self.prior.log_density(x) + self.reward.log_reward(x)
+    def log_density(self, x, anneal_beta=1.0):
+        return self.prior.log_density(x) + self.reward.log_reward(x, beta=anneal_beta)

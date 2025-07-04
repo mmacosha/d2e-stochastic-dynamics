@@ -6,8 +6,12 @@ from sb.nn.mnist import MnistGen, MnistCLS
 
 import sys
 sys.path.append("./external/sg3")
+sys.path.append("./external/cifar10_cls")
+sys.path.append("./external/sngan")
 
 import dnnlib, legacy
+from cifar10_models.vgg import vgg13_bn
+from models.sngan_cifar10 import Generator
 
 
 def max_reward(target_values):
@@ -64,10 +68,10 @@ class ClsReward(nn.Module):
         for param in self.parameters():
             param.requires_grad = False
 
-    def forward(self, latents):
+    def forward(self, latents, beta=1.0):
         x_pred = self.generator(latents)
         x_pred = _renormalize(x_pred)
-        logits = self.classifier(x_pred)
+        logits = self.classifier(x_pred) / beta
         all_probas = logits.softmax(dim=1)
         probas, classes = all_probas.max(dim=1)
         return {
@@ -85,7 +89,17 @@ class ClsReward(nn.Module):
     def get_precision(self, classes):
         target_classes = torch.tensor(self.target_classes).view(-1, 1)
         precision = (classes == target_classes.to(classes.device))
-        return precision.float().mean()
+        return precision.float().sum(0).mean()
+    
+    def get_target_class_images(self, output, size):
+        classes = output['classes']
+        probas = output['probas']
+        images = output['images']
+
+        target_classes = torch.tensor(self.target_classes).view(-1, 1)
+        target_classes = target_classes.to(classes.device)
+        idx = torch.nonzero((classes == target_classes), as_tuple=False)[:, -1]
+        return images[idx][:size], probas[idx][:size], classes[idx][:size]
 
     def reward(self, latents):
         probas = self(latents)['all_probas']
@@ -105,8 +119,8 @@ class ClsReward(nn.Module):
 
         return reward, precision
     
-    def log_reward(self, latents):
-        logits = self(latents)['logits']
+    def log_reward(self, latents, beta=1.0):
+        logits = self(latents, beta=beta)['logits']
         logits = logits - logits.max(dim=1, keepdim=True).values
         peaked_logits = logits[:, self.target_classes]
         
@@ -150,6 +164,14 @@ class ClsReward(nn.Module):
             generator = MnistGen(**ckpt["config"])
             generator.load_state_dict(ckpt["state_dict"])
 
+        elif generator_type == "cifar10-sngan":
+            class AttrDict(dict):
+                def __getattr__(self, name):
+                    return self[name]
+            args = AttrDict(bottom_width=4, gf_dim=256, latent_dim=128)
+            generator = Generator(args)
+            generator.load_state_dict(torch.load('external/sngan/sngan_cifar10.pth'))
+
         elif generator_type in {'cifar10-gan-z50', 'cifar10-gan-z100', 'cifar10-gan-z256'}:
             ckpt = torch.load(
                 f'{reward_dir}/rewards/cifar10/{generator_type}.pt',
@@ -179,8 +201,10 @@ class ClsReward(nn.Module):
             classifier = MnistCLS()
             classifier.load_state_dict(ckpt)
 
+        elif classifier_type == "cifar10-vgg":
+            classifier = vgg13_bn(pretrained=True)
         else:
-            raise NotImplemented(f"Unknown classifier type: {classifier_type}")
+            raise NotImplementedError(f"Unknown classifier type: {classifier_type}")
         
         generator.eval()
         classifier.eval()

@@ -1,4 +1,3 @@
-import random
 import torch
 
 from .langevin_buffer import LangevinReplayBuffer

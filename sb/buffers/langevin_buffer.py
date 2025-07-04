@@ -1,16 +1,18 @@
-import math
-
-import torch
+from typing import Callable
 
 import sys
-sys.path.append('external/hamiltorch')
-import hamiltorch
+import math
+import wandb
+import torch
+import functools
 
 from tqdm.auto import trange
-import wandb
+import matplotlib.pyplot  as plt
 
 from . import simple_buffer
 
+sys.path.append('external/hamiltorch')
+import hamiltorch
 
 
 def compute_grad(fn, x):
@@ -76,18 +78,18 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
             anneal_value: float = 1.0,
             hmc_freq: int = 4,
             device = 'cpu',
-            reward_proportional_sample: bool = False,
+            beta_fn: Callable = None,
             *args, **kwargs
         ):
         super().__init__(buffer_size)
         self.device = device
         self.lmbda = ema_lambda
+        self.beta_fn = eval(beta_fn) if beta_fn else None
 
         self.anneal_value = anneal_value
         self.hmc_freq = hmc_freq
         self.noise_start_ration = noise_start_ration
         self.num_steps = num_langevin_steps
-        self.reward_proportional_sample = reward_proportional_sample
         
         self.sampler = sampler
         self.step_size = init_step_size
@@ -121,9 +123,12 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
         prev_z = None
         dt = self.step_size
         anneal_alpha = math.exp(math.log(self.anneal_value) / self.num_steps)
-        for _ in trange(self.num_steps, desc='Langevin', leave=False):
+        for i in trange(self.num_steps, desc='Langevin', leave=False):
             if self.sampler in {'legacy', 'ula', 'ula2'}:
-                y, prev_z = ula_step(self.log_density, x, dt, prev_z)
+                beta = self.beta_fn(i) if self.beta_fn else None
+                density_fn = functools.partial(self.log_density, anneal_beta=beta)
+                
+                y, prev_z = ula_step(density_fn, x, dt, prev_z)
                 x = self.lmbda * x + (1 - self.lmbda) * y
                 prev_z = prev_z if self.sampler == 'ula2' else None
             
@@ -137,12 +142,22 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
             
             if wandb.run is not None:
                 with torch.no_grad():
-                    rwd, prc = self.reward.get_reward_and_precision(x)
+                    outputs = self.reward(x)
+                    rwd, prc = self.reward.get_reward_and_precision(outputs=outputs)
+                    
+                    probas = outputs['all_probas'].mean(dim=0).cpu()
+                    fig = plt.figure(figsize=(12, 8))
+                    plt.xticks([i for i in range(10)])
+                    plt.stem(probas)
+                    plt.show()
+
                     wandb.log({
+                        "metrics/hist": wandb.Image(fig),
                         "metrics/langevin_precision": prc,
                         "metrics/langevin_mean_log_reward": rwd.log().mean(),
                         "langevin_step_counter": self.langevin_step_counter
                     })
+                    plt.close('all')
             
             self.langevin_step_counter += 1
         
