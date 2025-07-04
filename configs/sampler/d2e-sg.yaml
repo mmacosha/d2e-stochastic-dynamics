@@ -1,0 +1,31 @@
+name: d2e
+device: cuda:0
+
+# logging
+save_checkpoint_freq: 5
+log_fwd_freq: 1
+log_bwd_freq: 1
+
+# training
+batch_size: 128
+matching_method: ll
+backward_first: true
+num_sb_steps: 500
+fwd_optim_lr: 5e-4
+bwd_optim_lr: 5e-4
+anneal_beta_fn: 'lambda it, n: 1.2 * math.exp(-it * 10 / n) + 0.1'
+num_fwd_steps: 500
+num_bwd_steps: 100
+fwd_ema_decay: 0.0
+bwd_ema_decay: 0.0
+
+# ref process
+dt: 0.04
+alpha: 0.0
+t_max: 0.8
+n_steps: 20
+
+# policy
+n_trajectories: 2
+start_mixed_from: 0
+off_policy_fraction: 0.8
