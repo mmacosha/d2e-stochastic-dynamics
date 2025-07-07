@@ -1,9 +1,18 @@
 import click
+import regex as re
 from hydra import initialize, compose
+from omegaconf import OmegaConf
 
 from sb.data import datasets
 from sb.nn.mlp import SimpleNet
 from sb.samplers import SBConfig, D2DSB, D2ESB, D2ESBConfig
+
+
+def read_overrides(overrides):
+    if not overrides:
+        return []
+    pattern = r"[\w@.]+=(?:\"[^\"]*\"|'[^']*'|\[[^\]]*\]|[^,]+)"
+    return re.findall(pattern, overrides)
 
 
 @click.command()
@@ -17,8 +26,16 @@ from sb.samplers import SBConfig, D2DSB, D2ESB, D2ESBConfig
 def run(cfg_path: str, cfg: str, name: str, wandb: str, 
         device: int, debug: bool, overrides=None):
     with initialize(version_base=None, config_path=cfg_path):
-        overrides = overrides.split(',') if overrides else []
+        overrides = read_overrides(overrides)
+        
+        print('\nThe following overrides are applied:')
+        for override in overrides:
+            print("    ", override)
+        print(flush=True)
+
+        OmegaConf.register_new_resolver('mul', lambda x, y: x * y)
         config = compose(config_name=cfg, overrides=overrides)
+
         if debug:
             print("\nATTENTION: DEBUG MODE IS ON!\n")
             config.exp.mode = 'disabled'
@@ -46,20 +63,25 @@ def run(cfg_path: str, cfg: str, name: str, wandb: str,
 
     if  config.sampler.name == 'd2d':
         sb_config = SBConfig(**config.sampler)
-        sb_trainer_cls = D2DSB
+        sb_trainer = D2DSB(
+            fwd_model=fwd_model,
+            bwd_model=bwd_model,
+            p0=p0, p1=p1,
+            config=sb_config,
+        )
     elif config.sampler.name == 'd2e':
         sb_config = D2ESBConfig(**config.sampler)
-        sb_trainer_cls = D2ESB
+        sb_trainer = D2ESB(
+            fwd_model=fwd_model,
+            bwd_model=bwd_model,
+            p0=p0, p1=p1,
+            config=sb_config,
+            buffer_config=config.buffer
+        )
     else: 
         raise NotImplementedError('this trainer is not available')
     
-    sb_trainer = sb_trainer_cls(
-        fwd_model=fwd_model,
-        bwd_model=bwd_model,
-        p0=p0, p1=p1,
-        config=sb_config,
-    )
-    sb_trainer.train(config.exp)
+    sb_trainer.train(config.exp, full_cfg=config)
 
 
 if __name__ == "__main__":

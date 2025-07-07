@@ -36,6 +36,7 @@ class D2ESBConfig(base_class.SBConfig):
     drift_reg_coeff: float = 0.0
     reuse_backward_trajectory: bool = True
     n_trajectories: int = 2
+    num_img_to_log: int = 36
     off_policy_fraction: float = 0.25
     start_mixed_from: int = 0
     val_batch_size: int = 64
@@ -195,6 +196,7 @@ class D2ESB(base_class.SB):
         n_steps = self.config.n_steps
         val_batch_size = self.config.val_batch_size
         device = self.config.device
+        num_img_to_log = self.config.num_img_to_log
 
         # sample x0 and compute metrics
         x0 = self.p0.sample(val_batch_size).to(device)
@@ -209,9 +211,9 @@ class D2ESB(base_class.SB):
         }
         if self.config.logging_data == "images":
             # log image from real latents
-            real_img = self.p1.reward.generator(x0[:36]).cpu()
-            img_dim = real_img.view(36, -1).shape[1]
-            image_shape = (36, ) + _infer_shape(img_dim)
+            real_img = self.p1.reward.generator(x0[:num_img_to_log]).cpu()
+            img_dim = real_img.view(num_img_to_log, -1).shape[1]
+            image_shape = (num_img_to_log, ) + _infer_shape(img_dim)
             real_img_grid = make_grid(
                 real_img.view(*image_shape), nrow=6, normalize=True
             )
@@ -219,25 +221,43 @@ class D2ESB(base_class.SB):
             # log image from generated latents
             x1_pred = sutils.sample_trajectory(self.fwd_model, x0, 'forward', 
                                                dt, n_steps, t_max, only_last=True)
+            
+            L2_between_x0_x1 = (x1_pred - x0).pow(2).sum(1).mean()
+            path_kl = metrics.compute_path_kl(self.fwd_model, x0, dt, t_max, n_steps)
+            
+            logging_dict["metrics/L2^2(x0, x1)"] = L2_between_x0_x1
+            logging_dict["metrics/Path_KL"] = path_kl
+
 
             output = self.p1.reward(x1_pred)
             pred_img_grid = make_grid(
-                output["images"][:36].clip(0, 1).cpu().view(image_shape), 
+                output["images"][:num_img_to_log].clip(0, 1).cpu().view(image_shape), 
                 nrow=6, normalize=True
             )
 
             random_annotated_img = utils.plot_annotated_images(
-                output["images"][:36].clip(0, 1).cpu().view(image_shape), 
-                probas_classes=(output["probas"][:36], output["classes"][:36]), 
-                n_col=6, figsize=(18, 18)
+                output["images"][:num_img_to_log].clip(0, 1).cpu().view(image_shape), 
+                probas_classes=(
+                    output["probas"][:num_img_to_log], 
+                    output["classes"][:num_img_to_log]
+                ), 
+                n_col=6, 
+                figsize=(18, 18)
             )
 
-            images, probas, classes = self.p1.reward.get_target_class_images(output, 36)
+            images, probas, classes = self.p1.reward.get_target_class_images(
+                output, num_img_to_log
+            )
             images = torch.cat([
-                images.cpu(), torch.zeros(36 - images.size(0), *images.shape[1:])
+                images.cpu(), 
+                torch.zeros(num_img_to_log - images.size(0), *images.shape[1:])
             ])
-            probas = torch.cat([probas.cpu(), torch.zeros(36 - probas.size(0))])
-            classes = torch.cat([classes.cpu(), torch.zeros(36 - classes.size(0))])
+            probas = torch.cat([
+                probas.cpu(), torch.zeros(num_img_to_log - probas.size(0))
+            ])
+            classes = torch.cat([
+                classes.cpu(), torch.zeros(num_img_to_log - classes.size(0))
+            ])
             
             target_class_fig = utils.plot_annotated_images(
                 images.clip(0, 1).cpu().view(image_shape), (probas, classes),
@@ -260,8 +280,11 @@ class D2ESB(base_class.SB):
             
             buffer_output = self.p1.reward(x_buffer)
             fig2 = utils.plot_annotated_images(
-                buffer_output["images"][:36].clip(0, 1).cpu().view(image_shape),
-                (buffer_output["probas"][:36], buffer_output["classes"][:36]), 
+                buffer_output["images"][:num_img_to_log].clip(0, 1).cpu().view(image_shape),
+                probas_classes=(
+                    buffer_output["probas"][:num_img_to_log], 
+                    buffer_output["classes"][:num_img_to_log]
+                ), 
                 n_col=6, figsize=(18, 18)
             )
             

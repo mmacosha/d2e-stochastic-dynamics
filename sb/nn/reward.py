@@ -4,15 +4,23 @@ from torch import nn
 from sb.nn.cifar import CifarGen, CifarCls
 from sb.nn.mnist import MnistGen, MnistCLS
 
+from transformers import ViTForImageClassification
+
 import sys
 sys.path.append("./external/sg3")
 sys.path.append("./external/cifar10_cls")
 sys.path.append("./external/sngan")
 
 import dnnlib, legacy
-from cifar10_models.vgg import vgg13_bn
+import cifar10_models.vgg as vgg
+import cifar10_models.resnet as resnet
 from models.sngan_cifar10 import Generator
 
+
+def _renormalize(image):
+    if image.min() < 0:
+        image = (image + 1) / 2
+    return image
 
 def max_reward(target_values):
     return target_values.max(dim=1).values
@@ -41,11 +49,15 @@ class StyleGanWrapper(nn.Module):
         x = self.G(latents, c, noise_mode='const')
         return x
 
+class TransformersModelWrapper(nn.Module):
+    def __init__(self, model, name, shape):
+        super().__init__()
+        self.shape = shape
+        self.model = model.from_pretrained(name)
 
-def _renormalize(image):
-    if image.min() < 0:
-        image = (image + 1) / 2
-    return image
+    def forward(self, x):
+        x = nn.functional.interpolate(x, self.shape)
+        return self.model(x).logits
 
 
 class ClsReward(nn.Module): 
@@ -155,6 +167,11 @@ class ClsReward(nn.Module):
             generator = StyleGanWrapper(
                 f'{reward_dir}/rewards/cifar10/stylegan2-cifar10-32x32.pkl'
             )
+
+        elif generator_type == 'celeba-stylegan':
+            generator = StyleGanWrapper(
+                f'{reward_dir}/rewards/celeba/stylegan2-celebahq-256x256.pkl'
+            )
         
         elif generator_type in {"mnist-gan-z10", "mnist-gan-z50"}:
             ckpt = torch.load(
@@ -172,7 +189,8 @@ class ClsReward(nn.Module):
             generator = Generator(args)
             generator.load_state_dict(torch.load('external/sngan/sngan_cifar10.pth'))
 
-        elif generator_type in {'cifar10-gan-z50', 'cifar10-gan-z100', 'cifar10-gan-z256'}:
+        elif generator_type in {'cifar10-gan-z50', 'cifar10-gan-z100', 
+                                'cifar10-gan-z256'}:
             ckpt = torch.load(
                 f'{reward_dir}/rewards/cifar10/{generator_type}.pt',
                 map_location='cpu', weights_only=True
@@ -201,8 +219,26 @@ class ClsReward(nn.Module):
             classifier = MnistCLS()
             classifier.load_state_dict(ckpt)
 
-        elif classifier_type == "cifar10-vgg":
-            classifier = vgg13_bn(pretrained=True)
+        elif classifier_type == "cifar10-vgg13":
+            classifier = vgg.vgg13_bn(pretrained=True)
+        elif classifier_type == "cifar10-vgg19":
+            classifier = vgg.vgg19_bn(pretrained=True)
+        elif classifier_type == "cifar10-resnet18":
+            classifier = resnet.resnet18(pretrained=True)
+        elif classifier_type == "cifar10-resnet50":
+            classifier = resnet.resnet50(pretrained=True)
+        elif classifier_type == "faces-gender":
+            classifier = TransformersModelWrapper(
+                ViTForImageClassification,
+                "rizvandwiki/gender-classification",
+                shape=224
+            )
+        elif classifier_type == "faces-emotions":
+            classifier = TransformersModelWrapper(
+                ViTForImageClassification,
+                "trpakov/vit-face-expression",
+                shape=224
+            )
         else:
             raise NotImplementedError(f"Unknown classifier type: {classifier_type}")
         

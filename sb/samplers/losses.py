@@ -65,7 +65,7 @@ def compute_fwd_tlm_loss(fwd_model, bwd_model, x1, dt, t_max, n_steps,
             if matching_method == "ll":
                 bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, xt, t, dt)
                 noise_std = bwd_log_var.exp().sqrt()
-                xt_m_dt = bwd_mean + torch.randn_like(bwd_mean) *noise_std
+                xt_m_dt = bwd_mean + torch.randn_like(bwd_mean) * noise_std
             
             elif matching_method == "mean":
                 bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, xt, t, dt)

@@ -1,7 +1,8 @@
 import ot
 import math
 import torch
-from sb.samplers import losses
+
+from sb.samplers import losses, utils
 
 
 def log_mean_exp(x, dim: int = None):
@@ -26,8 +27,37 @@ def compute_elbo(fwd_model, bwd_model, log_p_1, x, dt, t_max, num_t_steps, n_tra
 
 @torch.no_grad()
 def compute_w2_distance(true, pred, reg=1.0):
-    cost_matrix = ot.dist(true, pred, metric='euclidean') ** 2
-    a = torch.ones(true.shape[0], device=true.device) / true.shape[0]
-    b = torch.ones(pred.shape[0], device=pred.device) / pred.shape[0]
-    w2_distance = ot.sinkhorn2(a, b, cost_matrix, reg)
+    cost_matrix = torch.cdist(true, pred, p=2) ** 2
+    p1 = torch.ones(true.shape[0], device=true.device) / true.shape[0]
+    p2 = torch.ones(pred.shape[0], device=pred.device) / pred.shape[0]
+    w2_distance = ot.sinkhorn2(p1, p2, cost_matrix, reg)
     return w2_distance
+
+
+@torch.no_grad()
+def compute_path_kl(fwd_model, x0, dt, t_max, n_steps, matching_method="ll"):
+    """Compute KL[p(tau|x0) || q(tau | x0)]."""
+    if matching_method != "ll":
+        raise NotImplementedError("Not implemented for methods other that `ll`")
+
+    xt = x0
+    path_kl = 0
+    for t_step in torch.linspace(0, t_max - dt, n_steps):
+        t = torch.ones(xt.size(0), device=xt.device) * t_step
+        fwd_mean, fwd_log_var = utils.get_mean_log_var(
+                fwd_model, xt, t, dt
+            )
+        noise_var = fwd_log_var.exp()
+        
+        xt_p_dt = fwd_mean + torch.randn_like(fwd_mean) * noise_var.sqrt()
+        
+        step_kl = 0.5 * (
+            torch.sum(
+                torch.log(2 * dt / noise_var) + 
+                (xt_p_dt - xt).pow(2) / (2 * dt) -
+                (xt_p_dt - fwd_mean).pow(2) / noise_var, dim=1)
+        )
+
+        path_kl += step_kl
+    
+    return path_kl.mean()
