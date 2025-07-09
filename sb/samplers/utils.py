@@ -4,7 +4,7 @@ from sb.nn import utils
 from .losses import _make_bwd_sde_step, _make_fwd_sde_step
 
 
-def get_mean_log_var(model, x, t, dt):
+def get_mean_log_var(model, x, t, dt, return_drift: bool = False):
     log_var = torch.log(torch.ones_like(x) * 2.0 * dt)
     output = model(x, t)
     
@@ -15,9 +15,11 @@ def get_mean_log_var(model, x, t, dt):
     
     if output.drift.isnan().any():
         raise ValueError("Drift is Nan")
-    
-
     mean = x + output.drift * dt
+    
+    if return_drift:
+        return output.drift, mean, log_var
+
     return mean, log_var
 
 

@@ -4,8 +4,11 @@ from hydra import initialize, compose
 from omegaconf import OmegaConf
 
 from sb.data import datasets
-from sb.nn.mlp import SimpleNet
-from sb.samplers import SBConfig, D2DSB, D2ESB, D2ESBConfig
+from sb.nn import SimpleNet, DSFixedBackward
+from sb.samplers import (
+    SBConfig, D2ESBConfig,
+    D2DSB, D2ESB, DiffusionSampler
+)
 
 
 def read_overrides(overrides):
@@ -76,6 +79,15 @@ def run(cfg_path: str, cfg: str, name: str, wandb: str,
             bwd_model=bwd_model,
             p0=p0, p1=p1,
             config=sb_config,
+            buffer_config=config.buffer
+        )
+    elif config.sampler.name == "ds":
+        bwd_model = DSFixedBackward(**config.models.bwd).to(config.sampler.device)
+        sb_trainer = DiffusionSampler(
+            fwd_model=fwd_model,
+            bwd_model=bwd_model,
+            p0=p0, p1=p1,
+            config=config.sampler,
             buffer_config=config.buffer
         )
     else: 

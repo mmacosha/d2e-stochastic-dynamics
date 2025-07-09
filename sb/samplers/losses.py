@@ -250,13 +250,15 @@ def compute_fwd_tb_loss(fwd_model, bwd_model, log_p1, log_p0, x, dt, t_max,
     return (log  - log.mean(0, keepdim=True).detach()).pow(2).mean()
 
 
-
 def compute_fwd_vargrad_loss(fwd_model, bwd_model, log_p1, x, dt, t_max, 
-                             num_t_steps,p1_buffer = None, n_trajectories: int = 2):
+                             num_t_steps, p1_buffer = None, 
+                             n_trajectories: int = 2, 
+                             compute_var: bool = True):
     log = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p1, x, dt, 
                                         t_max, num_t_steps, p1_buffer=p1_buffer)
-    if n_trajectories == 1:
-        return log.pow(2).mean()
+    
+    if not compute_var:
+        return log
 
     log = log.reshape(n_trajectories, -1)
     return (log  - log.mean(0, keepdim=True).detach()).pow(2).mean()
@@ -268,3 +270,25 @@ def compute_bwd_vargrad_loss(fwd_model, bwd_model, log_p0, x, dt, t_max,
                                         num_t_steps, p0_buffer=p0_buffer)
     log = log.reshape(n_trajectories, -1)
     return (log  - log.mean(0, keepdim=True).detach()).pow(2).mean()
+
+
+def compute_fwd_tb_log_difference_reuse_traj(
+        fwd_model, bwd_model, log_p1, x, dt, t_max, num_t_steps,
+):
+    xt = x
+    fwd_tl_sum, bwd_tl_sum = 0, log_p1(xt)
+    for t_step in torch.linspace(t_max, dt, num_t_steps):
+        t = torch.ones(xt.size(0), device=xt.device) * t_step
+
+        with torch.no_grad():
+            bwd_mean, bwd_log_var = utils.get_mean_log_var(bwd_model, xt, t, dt)
+            xt_m_dt = bwd_mean + bwd_log_var.exp().sqrt() * torch.randn_like(bwd_mean)
+            bwd_tl_sum = bwd_tl_sum + log_normal_density(xt_m_dt, bwd_mean, bwd_log_var)
+
+        fwd_mean, fwd_log_var = utils.get_mean_log_var(fwd_model, xt_m_dt, t - dt, dt)
+        fwd_tl_sum = fwd_tl_sum + log_normal_density(xt, fwd_mean, fwd_log_var)
+
+        xt = xt_m_dt
+
+    log_diff = bwd_tl_sum - fwd_tl_sum
+    return log_diff, xt

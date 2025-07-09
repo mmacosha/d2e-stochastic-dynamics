@@ -68,7 +68,7 @@ def main(device: int, gen: str, cls_: str, classes, mode: str,
         noise_start_ratio=0.5,
         anneal_value=anneal_value,
         device=device,
-        beta_fn="lambda i: 1.95 * math.exp(- i / 10) + 0.05"
+        beta_fn="lambda i: 0.1"
     )
     name = "--".join([
         f"{gen=}",
