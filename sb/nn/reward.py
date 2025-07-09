@@ -1,10 +1,11 @@
 import torch
 from torch import nn
+from torchvision.transforms import v2
 
 from sb.nn.cifar import CifarGen, CifarCls
 from sb.nn.mnist import MnistGen, MnistCLS
 
-from transformers import ViTForImageClassification
+from transformers import ViTForImageClassification, ViTImageProcessor
 
 import sys
 sys.path.append("./external/sg3")
@@ -54,10 +55,38 @@ class TransformersModelWrapper(nn.Module):
         super().__init__()
         self.shape = shape
         self.model = model.from_pretrained(name)
+        
+        processor = ViTImageProcessor.from_pretrained(name)
+        self.normalize = v2.Normalize(processor.image_mean, processor.image_std)
 
     def forward(self, x):
         x = nn.functional.interpolate(x, self.shape)
+        x = self.normalize(x)
         return self.model(x).logits
+
+
+class CIFAR10ClsWrapper(nn.Module):
+    def __init__(self, name):
+        super().__init__()
+
+        self.register_buffer('mean', torch.tensor([0.4914, 0.4822, 0.4465]).view(3, 1, 1))
+        self.register_buffer('std', torch.tensor([0.2471, 0.2435, 0.2616]).view(3, 1, 1))
+        
+        mean, std = [0.4914, 0.4822, 0.4465], [0.2471, 0.2435, 0.2616]
+        self.normalize = v2.Normalize(mean, std)
+        
+        if name == "cifar10-vgg13":
+            self.model = vgg.vgg13_bn(pretrained=True)
+        elif name == "cifar10-vgg19":
+            self.model = vgg.vgg19_bn(pretrained=True)
+        elif name == "cifar10-resnet18":
+            self.model = resnet.resnet18(pretrained=True)
+        elif name == "cifar10-resnet50":
+            self.model = resnet.resnet50(pretrained=True)
+
+    def forward(self, x):
+        x = (x - self.mean) / self.std
+        return self.model(x)
 
 
 class ClsReward(nn.Module): 
@@ -148,7 +177,6 @@ class ClsReward(nn.Module):
                 "efficient log_reward is not implemented for this reward type."
             )
 
-
     def state_dict(self):
         return {
             'generator': self.generator.state_dict(),
@@ -219,14 +247,9 @@ class ClsReward(nn.Module):
             classifier = MnistCLS()
             classifier.load_state_dict(ckpt)
 
-        elif classifier_type == "cifar10-vgg13":
-            classifier = vgg.vgg13_bn(pretrained=True)
-        elif classifier_type == "cifar10-vgg19":
-            classifier = vgg.vgg19_bn(pretrained=True)
-        elif classifier_type == "cifar10-resnet18":
-            classifier = resnet.resnet18(pretrained=True)
-        elif classifier_type == "cifar10-resnet50":
-            classifier = resnet.resnet50(pretrained=True)
+        elif classifier_type in {"cifar10-vgg13", "cifar10-vgg19", 
+                                 "cifar10-resnet18", "cifar10-resnet50"}:
+            classifier = CIFAR10ClsWrapper(classifier_type)
         elif classifier_type == "faces-gender":
             classifier = TransformersModelWrapper(
                 ViTForImageClassification,
