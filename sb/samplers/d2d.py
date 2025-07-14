@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 
 import sb.utils as utils
 import sb.metrics as metrics
+from sb.losses import losses
 
-from . import losses
 from . import utils as sutils
 from . import base_class
 

@@ -1,27 +1,10 @@
 import torch
-from sb.nn import utils
-
-from .losses import _make_bwd_sde_step, _make_fwd_sde_step
-
-
-def get_mean_log_var(model, x, t, dt, return_drift: bool = False):
-    log_var = torch.log(torch.ones_like(x) * 2.0 * dt)
-    output = model(x, t)
-    
-    if output.contains('log_var'):
-        log_var = log_var + output.log_var
-        if log_var.isnan().any():
-            raise ValueError("Log var is Nan")
-    
-    if output.drift.isnan().any():
-        raise ValueError("Drift is Nan")
-    mean = x + output.drift * dt
-    
-    if return_drift:
-        return output.drift, mean, log_var
-
-    return mean, log_var
-
+from sb.nn.utils import ModelOutput
+from sb.losses.utils import (
+    get_mean_log_var,
+    make_fwd_sde_step, 
+    make_bwd_sde_step, 
+)
 
 @torch.no_grad()
 def sample_trajectory(model, x_start, direction, dt, n_steps, t_max, 
@@ -45,9 +28,9 @@ def sample_trajectory(model, x_start, direction, dt, n_steps, t_max,
 
         if matching_method == "sde":
             if direction == "backward":
-                x_new = _make_bwd_sde_step(mean, trajectory[-1], dt, 1.42, noise_std)
+                x_new = make_bwd_sde_step(mean, trajectory[-1], dt, 1.42, noise_std)
             else:
-                x_new = _make_fwd_sde_step(mean, trajectory[-1], dt, 1.42, noise_std)
+                x_new = make_fwd_sde_step(mean, trajectory[-1], dt, 1.42, noise_std)
 
         if matching_method in {"ll", "mean"}:
             x_new = mean + torch.randn_like(mean) * noise_std
@@ -67,18 +50,9 @@ def sample_trajectory(model, x_start, direction, dt, n_steps, t_max,
     return trajectory
 
 
-class ReferenceProcess:
-    def __init__(self, alpha: float, gamma: float):
-        self.alpha = alpha
-        self.gamma = gamma
-    
-    def __call__(self, x, t):
-        return utils.ModelOutput(drift=-self.alpha * self.gamma * x)
-    
-
 class ReferenceProcess2:
     def __init__(self, alpha: float):
         self.alpha = alpha
     
     def __call__(self, x, t):
-        return utils.ModelOutput(drift= - self.alpha * x)
+        return ModelOutput(drift= - self.alpha * x)

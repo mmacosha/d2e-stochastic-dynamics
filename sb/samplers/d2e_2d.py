@@ -1,7 +1,6 @@
 import torch
 import wandb
 
-from torchvision.utils import make_grid
 from matplotlib import pyplot as plt
 
 from sb import utils, metrics

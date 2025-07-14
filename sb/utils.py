@@ -1,7 +1,13 @@
+from typing import List
+
+import sys
+import os
+import importlib
+import warnings
+
 import inspect
 import functools
 
-import numpy as np
 import matplotlib.pyplot as plt
 
 
@@ -152,3 +158,18 @@ class Registry:
     @property
     def available(self):
         return list(self._regirstry)
+    
+
+def import_conditionally(path: str, pkgs: List[str]):
+    abs_path = os.path.abspath(path)
+    if os.path.exists(abs_path):
+        if path not in sys.path:
+            sys.path.append(abs_path)
+            for pkg in pkgs:
+                importlib.import_module(pkg)
+    else:
+        warnings.warn(
+            f"Path '{path}' does not exist, package. "
+            "Correstponding modules are not imported."
+        )
+        return None

@@ -14,7 +14,7 @@ registry = base.DatasetRegistry()
 
 @registry.add(name="two_moons")
 class TwoMoons(base.Dataset):
-    def __init__(self, shift=None, noise=None):
+    def __init__(self, shift=None, noise=0.01):
         self.shift = shift
         self.noise = noise or 0
         self.fn = datasets_fn_2d.two_moons
@@ -27,7 +27,7 @@ class TwoMoons(base.Dataset):
 
 @registry.add(name="swiss_roll")
 class SwissRoll(base.Dataset):
-    def __init__(self, shift=None, noise=None):
+    def __init__(self, shift=None, noise=0.01):
         self.shift = shift
         self.noise = noise or 0
         self.fn = datasets_fn_2d.swiss_roll
@@ -40,7 +40,7 @@ class SwissRoll(base.Dataset):
 
 @registry.add(name="s_curve")
 class SCurve(base.Dataset):
-    def __init__(self, shift=None, noise=None):
+    def __init__(self, shift=None, noise=0.01):
         self.shift = shift
         self.noise = noise or 0
         self.fn = datasets_fn_2d.s_curve
@@ -53,7 +53,7 @@ class SCurve(base.Dataset):
 
 @registry.add(name="two_circles")
 class TwoCircles(base.Dataset):
-    def __init__(self, shift=None, noise=None):
+    def __init__(self, shift=None, noise=0.01):
         self.shift = shift
         self.noise = noise or 0
         self.fn = datasets_fn_2d.two_circles
@@ -91,16 +91,23 @@ class Checkboard(base.Dataset):
 
 
 @registry.add(name="mix_of_gaussians")
-class MixOfGaussians(base.Dataset):
-    def __init__(self, means, sigmas, device: str = 'cpu'):
-        means = torch.as_tensor(means, device=device).float()
-        sigmas = torch.as_tensor(sigmas, device=device).float()
-
-        mix = distributions.Categorical(torch.ones(means.size(0), device=device))
-        comp = distributions.Independent(distributions.Normal(means, sigmas), 1)
+class GMM(base.Dataset):
+    def __init__(self, r: int = 1, n_modes: int = 8, noise=0.01, device: str = 'cpu'):
+        angles = torch.linspace(0, 2 * math.pi, n_modes + 1)[:-1]
+        cos, sin = torch.cos(angles) * r, torch.sin(angles) * r
+        
+        means = torch.stack([cos, sin], dim=1).to(device)
+        stds = torch.ones_like(means) * noise
+        mode_probs = torch.ones(n_modes, device=device) / n_modes
+        
+        mix = distributions.Categorical(mode_probs)
+        comp = distributions.Independent(
+            base_distribution = distributions.Normal(means, stds),
+            reinterpreted_batch_ndims=1
+        )
         self.gmm = distributions.MixtureSameFamily(mix, comp)
 
-        self.grad_fn = torch.func.grad(lambda y: self.gmm.log_prob(y).sum())
+        # self.grad_fn = torch.func.grad(lambda y: self.gmm.log_prob(y).sum())
         self.reward = lambda x: torch.as_tensor(1.0)
 
     def sample(self, size):
@@ -109,8 +116,8 @@ class MixOfGaussians(base.Dataset):
     def log_density(self, x):
         return self.gmm.log_prob(x)
     
-    def grad_log_density(self, x):
-        return self.grad_fn(x)
+    # def grad_log_density(self, x):
+    #     return self.grad_fn(x)
 
 
 @registry.add(name="simple_gaussian")

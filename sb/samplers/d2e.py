@@ -11,9 +11,9 @@ from torchvision.utils import make_grid
 
 import sb.utils as utils
 import sb.metrics as metrics
+import sb.losses as losses
 from sb.buffers import ReplayBuffer, LangevinReplayBuffer, DecoupledLangevinBuffer
 
-from . import losses
 from . import utils as sutils
 from . import base_class
 

@@ -9,10 +9,13 @@ import functools
 from tqdm.auto import trange
 import matplotlib.pyplot  as plt
 
+from sb.utils import import_conditionally
 from . import simple_buffer
 
-sys.path.append('external/hamiltorch')
-import hamiltorch
+import_conditionally('external/hamiltorch', ['hamiltorch'])
+
+# sys.path.append('external/hamiltorch')
+# import hamiltorch
 
 
 def compute_grad(fn, x):

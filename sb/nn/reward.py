@@ -2,20 +2,27 @@ import torch
 from torch import nn
 from torchvision.transforms import v2
 
+from sb.utils import import_conditionally
 from sb.nn.cifar import CifarGen, CifarCls
 from sb.nn.mnist import MnistGen, MnistCLS
 
 from transformers import ViTForImageClassification, ViTImageProcessor
 
-import sys
-sys.path.append("./external/sg3")
-sys.path.append("./external/cifar10_cls")
-sys.path.append("./external/sngan")
+import_conditionally('external/sg3', ['dnnlib', 'legacy'])
+import_conditionally('external/cifar10_cls', ['cifar10_models'])
+import_conditionally('external/sngan', ['models'])
 
-import dnnlib, legacy
-import cifar10_models.vgg as vgg
-import cifar10_models.resnet as resnet
-from models.sngan_cifar10 import Generator
+
+
+# import sys
+# sys.path.append("./external/sg3")
+# sys.path.append("./external/cifar10_cls")
+# sys.path.append("./external/sngan")
+
+# import dnnlib, legacy
+# import cifar10_models.vgg as vgg
+# import cifar10_models.resnet as resnet
+# from models.sngan_cifar10 import Generator
 
 
 def _renormalize(image):
@@ -76,13 +83,13 @@ class CIFAR10ClsWrapper(nn.Module):
         self.normalize = v2.Normalize(mean, std)
         
         if name == "cifar10-vgg13":
-            self.model = vgg.vgg13_bn(pretrained=True)
+            self.model = cifar10_models.vgg.vgg13_bn(pretrained=True)
         elif name == "cifar10-vgg19":
-            self.model = vgg.vgg19_bn(pretrained=True)
+            self.model = cifar10_models.vgg.vgg19_bn(pretrained=True)
         elif name == "cifar10-resnet18":
-            self.model = resnet.resnet18(pretrained=True)
+            self.model = cifar10_models.resnet.resnet18(pretrained=True)
         elif name == "cifar10-resnet50":
-            self.model = resnet.resnet50(pretrained=True)
+            self.model = cifar10_models.resnet.resnet50(pretrained=True)
 
     def forward(self, x):
         x = (x - self.mean) / self.std
@@ -214,7 +221,7 @@ class ClsReward(nn.Module):
                 def __getattr__(self, name):
                     return self[name]
             args = AttrDict(bottom_width=4, gf_dim=256, latent_dim=128)
-            generator = Generator(args)
+            generator = models.sngan_cifar10.Generator(args)
             generator.load_state_dict(torch.load('external/sngan/sngan_cifar10.pth'))
 
         elif generator_type in {'cifar10-gan-z50', 'cifar10-gan-z100', 
