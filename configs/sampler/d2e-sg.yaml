@@ -13,7 +13,7 @@ backward_first: true
 num_sb_steps: 500
 fwd_optim_lr: 5e-4
 bwd_optim_lr: 5e-4
-anneal_beta_fn: 'lambda it, n: 1.2 * math.exp(-it * 10 / n) + 0.1'
+anneal_beta_fn: 'lambda it, n: 1.42 * math.exp(-it * 16 / n) + 0.08'
 num_fwd_steps: 500
 num_bwd_steps: 100
 fwd_ema_decay: 0.0
@@ -22,8 +22,8 @@ bwd_ema_decay: 0.0
 # ref process
 dt: 0.04
 alpha: 0.0
-t_max: 0.8
 n_steps: 20
+t_max: ${mul:${sampler.dt}, ${sampler.n_steps}}
 
 # policy
 n_trajectories: 2

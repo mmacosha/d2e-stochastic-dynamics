@@ -33,6 +33,7 @@ class SBConfig:
     bwd_optim_lr: int = 1e-3
     log_fwd_freq: int = 1
     log_bwd_freq: int = 1
+    log_img_freq: int = 10
 
     alpha: float = 4.0
     dt: float = 0.0006
@@ -41,7 +42,7 @@ class SBConfig:
 
     batch_size: int = 512
     val_batch_size: Optional[int] = None
-    save_checkpoint_freq: int = 2
+    save_checkpoint_freq: int = 100
     restore_from: int = -1
 
     def __post__init__(self):
@@ -53,45 +54,48 @@ class SBConfig:
             f"Available methods: mean, score, ll."
         
 
-def find_checkpoint(directory: str, checkpoint_num: int) -> str :
+def find_checkpoint(run_dir: str, checkpoint_num: int, run_id: str) -> str :
     """
     Get the checkpoint file from the given directory.
     If checkpoint_num is -1, return the last checkpoint.
     Otherwise, return the checkpoint corresponding to the checkpoint_num.
     
     Args:
-        directory (str): The directory containing checkpoint files.
+        run_dir (str): The directory containing checkpoint files.
         checkpoint_num (int): The checkpoint number to retrieve (-1 for the latest checkpoint).
+        run_id (str): The ID of the run to which the checkpoints belong.
     
     Returns:
         str: The path to the selected checkpoint file.
     """
-    directory_path = Path(directory)
-    if not directory_path.is_dir():
-        return None
+    if checkpoint_num != -1:
+        raise NotImplementedError("Cannot restore from a specific checkpoint.")
     
-    checkpoint_pattern = re.compile(r'checkpoint-(\d+).pth')
-    checkpoints = []
+    run_dir = Path(run_dir)
+    wandb_dir = run_dir.parent.parent
+    previous_run_with_same_id = [*wandb_dir.glob(f"*{run_id}")]
     
-    for file in directory_path.iterdir():
-        match = checkpoint_pattern.match(file.name)
-        if match:
-            checkpoints.append((int(match.group(1)), file))
+    if not previous_run_with_same_id:
+        return None, -1
     
-    if not checkpoints:
-        return None
-    
-    checkpoints.sort(reverse=True, key=lambda x: x[0])
-    
-    if checkpoint_num == -1:
-        return str(checkpoints[0][1])
-    
-    for num, file_ in checkpoints:
-        if num == checkpoint_num:
-            return Path(file_)
-    
-    raise FileNotFoundError(f"Checkpoint {checkpoint_num} not found in the directory.")
+    possible_checkpoints = []
+    for possible_run_dir in previous_run_with_same_id:
+        checkpoints_path = possible_run_dir / "files" / "checkpoints"
+        for ckpt in checkpoints_path.glob("checkpoint-*.pth"):
+            possible_checkpoints.append(ckpt)
 
+    if not possible_checkpoints:
+        return None, -1
+
+    checkpoint_path = sorted(
+        possible_checkpoints, 
+        key=lambda x: int(re.search(r'checkpoint-(\d+).pth', x.name).group(1)),
+        reverse=True
+    )[0]
+    sb_step = int(
+        re.search(r'checkpoint-(\d+).pth', checkpoint_path.name).group(1)
+    )
+    return checkpoint_path, sb_step
 
 
 class SB(ABC):
@@ -123,8 +127,8 @@ class SB(ABC):
                 artifact.add_file(cfg_path)
                 wandb.log_artifact(artifact)
 
-            self.resotre_from_last_checkpoint(run)
-            for sb_iter in trange(self.config.num_sb_steps, leave=False, 
+            sb_step = self.resotre_from_last_checkpoint(run)
+            for sb_iter in trange(sb_step + 1, self.config.num_sb_steps, leave=False, 
                                   desc="SB training"):
                 if self.config.backward_first:
                     self.train_backward_step(sb_iter, run)
@@ -164,14 +168,14 @@ class SB(ABC):
         wandb.save(checkpoint_path / f'checkpoint-{sb_iter}.pth')
 
     def resotre_from_last_checkpoint(self, run):
-        checkpoint_path = find_checkpoint(
-            Path(run.dir) / 'checkpoints', 
-            self.config.restore_from
+        checkpoint_path, sb_step = find_checkpoint(
+            run.dir, self.config.restore_from, run.id
         )
         
         if checkpoint_path is None:
             print("Checkpoint not found. Train from scratch!")
-            return
+            return sb_step
+        
         checkpoint_path = Path(checkpoint_path)
         checkpoint = torch.load(checkpoint_path, map_location=self.config.device)
         
@@ -185,6 +189,7 @@ class SB(ABC):
 
         # log that checkpoint is restored successfully
         print(f"Checkpoint successfully restored!")
+        return sb_step
 
  
     @abstractmethod

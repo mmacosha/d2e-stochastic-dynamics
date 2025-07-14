@@ -20,12 +20,13 @@ fwd_ema_decay: 0.0
 bwd_ema_decay: 0.0
 
 # ref process
-dt: 0.04
+dt: 0.005
 alpha: 0.0
-t_max: 0.8
 n_steps: 20
+t_max: ${mul:${sampler.dt}, ${sampler.n_steps}}
 
 # policy
 n_trajectories: 2
 start_mixed_from: 0
 off_policy_fraction: 0.8
+reuse_bwd_trajectory: false

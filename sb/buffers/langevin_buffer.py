@@ -79,9 +79,11 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
             hmc_freq: int = 4,
             device = 'cpu',
             beta_fn: Callable = None,
+            log_hist: bool = False,
             *args, **kwargs
         ):
         super().__init__(buffer_size)
+        self.log_hist = log_hist
         self.device = device
         self.lmbda = ema_lambda
         self.beta_fn = eval(beta_fn) if beta_fn else None
@@ -151,12 +153,18 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
                     plt.stem(probas)
                     plt.show()
 
-                    wandb.log({
-                        "metrics/hist": wandb.Image(fig),
+                    log_dict = {
                         "metrics/langevin_precision": prc,
                         "metrics/langevin_mean_log_reward": rwd.log().mean(),
                         "langevin_step_counter": self.langevin_step_counter
-                    })
+                    }
+                    
+                    if self.log_hist:
+                        log_dict.update({
+                             "metrics/hist": wandb.Image(fig),
+                        })
+                    
+                    wandb.log(log_dict)
                     plt.close('all')
             
             self.langevin_step_counter += 1
@@ -187,13 +195,15 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
         
         else:
             if self.is_empty():
-                x = torch.randn(batch_size, dim, device=self.device)
+                shape = (batch_size, *dim) \
+                    if isinstance(dim, (tuple, list)) else (batch_size, dim)
+                x = torch.randn(*shape, device=self.device)
             else:
                 x = super().sample(batch_size)
             
             if not self.is_empty() and self.noise_start_ration > 0:
                 noise_size = int(batch_size * self.noise_start_ration)
-                x[-noise_size:] = torch.randn(noise_size, x.size(1), device=x.device)
+                x[-noise_size:] = torch.randn(noise_size, *x.shape[1:], device=x.device)
             
             x = self.run_sampler(x)
             x = self.resample_propto_reward(x)

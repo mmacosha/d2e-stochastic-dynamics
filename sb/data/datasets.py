@@ -122,15 +122,18 @@ class SimpleGaussian(base.Dataset):
         self.dist = distributions.Normal(self.mean, self.sigma)
 
     def sample(self, size: int):
-        return self.dist.sample((size, self.dim))
+        shape = (size, *self.dim) if isinstance(self.dim, tuple) else (size, self.dim)
+        return self.dist.sample(shape)
 
     def log_density(self, x):
-        return self.dist.log_prob(x).sum(dim=1)
+        log_density = self.dist.log_prob(x)
+        log_density = log_density.view(log_density.size(0), -1).sum(dim=1)
+        return log_density
 
 
 @registry.add(name="cls_reward_dist")
 class ClsRewardDist(base.Dataset):
-    def __init__(self, generator_type: str, classifier_type: str, prior_dim: int, 
+    def __init__(self, generator_type: str, classifier_type: str, prior_dim, 
                  reward_dir: str, target_classes, reward_type: str, device: str):
         self.reward = ClsReward.build_reward(
             generator_type, classifier_type, target_classes, reward_type, reward_dir
