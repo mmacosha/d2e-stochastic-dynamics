@@ -19,14 +19,15 @@ def read_overrides(overrides):
 
 
 @click.command()
-@click.option('--cfg_path', 'cfg_path', type=click.Path(exists=True), default='configs')
-@click.option("--cfg", 'cfg', type=click.STRING, default='config')
-@click.option("--name", 'name', type=click.STRING, default=None)
-@click.option("--wandb", 'wandb', type=click.STRING, default='online')
-@click.option("--device", 'device', type=click.INT, default=0)
-@click.option("--debug", 'debug', type=click.BOOL, default=False, is_flag=True)
-@click.option("--overrides", 'overrides', type=click.STRING, default=None,)
-def run(cfg_path: str, cfg: str, name: str, wandb: str, 
+@click.option('--cfg_path',     "cfg_path",  type=click.Path(exists=True), default='configs')
+@click.option("--cfg",          "cfg",       type=click.STRING, default='config')
+@click.option("--name",         "name",      type=click.STRING, default=None)
+@click.option("--run_id",       "run_id",    type=click.STRING, default=None)
+@click.option("--wandb",        "wandb",     type=click.STRING, default='online')
+@click.option("--device",       "device",    type=click.INT, default=0)
+@click.option("--debug",        "debug",     type=click.BOOL, default=False, is_flag=True)
+@click.option("--overrides",    "overrides", type=click.STRING, default=None,)
+def run(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str, 
         device: int, debug: bool, overrides=None):
     with initialize(version_base=None, config_path=cfg_path):
         overrides = read_overrides(overrides)
@@ -47,6 +48,7 @@ def run(cfg_path: str, cfg: str, name: str, wandb: str,
             config.sampler.num_bwd_steps=10
             config.sampler.n_sb_iter = 2
         else:
+            config.exp.id = run_id 
             config.exp.mode = wandb
             config.exp.name = name if name else config.exp.name
         

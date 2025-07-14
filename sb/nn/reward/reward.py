@@ -1,103 +1,22 @@
 import torch
 from torch import nn
-from torchvision.transforms import v2
 
-from sb.utils import import_conditionally
-from sb.nn.cifar import CifarGen, CifarCls
-from sb.nn.mnist import MnistGen, MnistCLS
+from sb.nn.cifar  import CifarGen, CifarCls
+from sb.nn.mnist  import MnistGen, MnistCLS
+from sb.nn.celeba import CelebaCls
 
-from transformers import ViTForImageClassification, ViTImageProcessor
-
-import_conditionally('external/sg3', ['dnnlib', 'legacy'])
-import_conditionally('external/cifar10_cls', ['cifar10_models'])
-import_conditionally('external/sngan', ['models'])
-
-
-
-# import sys
-# sys.path.append("./external/sg3")
-# sys.path.append("./external/cifar10_cls")
-# sys.path.append("./external/sngan")
-
-# import dnnlib, legacy
-# import cifar10_models.vgg as vgg
-# import cifar10_models.resnet as resnet
-# from models.sngan_cifar10 import Generator
-
-
-def _renormalize(image):
-    if image.min() < 0:
-        image = (image + 1) / 2
-    return image
-
-def max_reward(target_values):
-    return target_values.max(dim=1).values
-
-
-def sum_reward(target_values):
-    return target_values.sum(dim=1)
-
-
-REWARD_FUNCTIONS = {
-    'max': max_reward,
-    'sum': sum_reward
-}
-
-class StyleGanWrapper(nn.Module):
-    def __init__(self, checkpoint: str):
-        super().__init__()
-        with dnnlib.util.open_url(checkpoint) as f:
-            self.G = legacy.load_network_pkl(f)['G_ema']
-    
-    def forward(self, latents):
-        c = torch.zeros(
-            (latents.shape[0], self.G.c_dim), 
-            device=latents.device
-        )
-        x = self.G(latents, c, noise_mode='const')
-        return x
-
-class TransformersModelWrapper(nn.Module):
-    def __init__(self, model, name, shape):
-        super().__init__()
-        self.shape = shape
-        self.model = model.from_pretrained(name)
-        
-        processor = ViTImageProcessor.from_pretrained(name)
-        self.normalize = v2.Normalize(processor.image_mean, processor.image_std)
-
-    def forward(self, x):
-        x = nn.functional.interpolate(x, self.shape)
-        x = self.normalize(x)
-        return self.model(x).logits
-
-
-class CIFAR10ClsWrapper(nn.Module):
-    def __init__(self, name):
-        super().__init__()
-
-        self.register_buffer('mean', torch.tensor([0.4914, 0.4822, 0.4465]).view(3, 1, 1))
-        self.register_buffer('std', torch.tensor([0.2471, 0.2435, 0.2616]).view(3, 1, 1))
-        
-        mean, std = [0.4914, 0.4822, 0.4465], [0.2471, 0.2435, 0.2616]
-        self.normalize = v2.Normalize(mean, std)
-        
-        if name == "cifar10-vgg13":
-            self.model = cifar10_models.vgg.vgg13_bn(pretrained=True)
-        elif name == "cifar10-vgg19":
-            self.model = cifar10_models.vgg.vgg19_bn(pretrained=True)
-        elif name == "cifar10-resnet18":
-            self.model = cifar10_models.resnet.resnet18(pretrained=True)
-        elif name == "cifar10-resnet50":
-            self.model = cifar10_models.resnet.resnet50(pretrained=True)
-
-    def forward(self, x):
-        x = (x - self.mean) / self.std
-        return self.model(x)
+from .utils import REWARD_FUNCTIONS, renormalize
+from .reward_wrappers import (
+    StyleGanWrapper, DCAEWrapper, 
+    CIFAR10ClsWrapper, ViTClsWrapper,
+    ImageNetClsWrapper, CIFAR10SNGANWrapper
+)
 
 
 class ClsReward(nn.Module): 
-    def __init__(self, generator, classifier, target_classes, reward_type='sum'):
+    def __init__(self, generator, classifier, 
+                 classifier_type, target_classes, 
+                 reward_type='sum'):
         super().__init__()
 
         if reward_type not in REWARD_FUNCTIONS:
@@ -105,6 +24,8 @@ class ClsReward(nn.Module):
                 f"Unknown reward type: {reward_type}. "
                 f"Chose from {list(REWARD_FUNCTIONS.keys())}."
             )
+        assert classifier_type != "celeba-cls-256", "This cls is not supported."
+        self.classifier_type = classifier_type
         self.reward_type = reward_type
         self.reward_fn = REWARD_FUNCTIONS[reward_type]
         self.target_classes = target_classes
@@ -118,16 +39,21 @@ class ClsReward(nn.Module):
 
     def forward(self, latents, beta=1.0):
         x_pred = self.generator(latents)
-        x_pred = _renormalize(x_pred)
+        # x_pred = renormalize(x_pred)
         logits = self.classifier(x_pred) / beta
-        all_probas = logits.softmax(dim=1)
-        probas, classes = all_probas.max(dim=1)
+        
+        if self.classifier_type in {"celeba-cls-64", "celeba-cls-32"}:
+            all_probas = nn.functional.sigmoid(logits)
+            probas, classes = all_probas.max(dim=1)
+        else:
+            all_probas = logits.softmax(dim=1)
+            probas, classes = all_probas.max(dim=1)
         return {
             'logits': logits,
             'probas': probas,
             'all_probas': all_probas,
             'classes': classes,
-            'images': x_pred    
+            'images': x_pred * 0.5 + 0.5   
         }
     
     def get_reward(self, probas):
@@ -169,6 +95,13 @@ class ClsReward(nn.Module):
     
     def log_reward(self, latents, beta=1.0):
         logits = self(latents, beta=beta)['logits']
+
+        if self.classifier_type in {"celeba-cls-64", "celeba-cls-32"}:
+            assert self.reward_type == "sum", "Only sum reward is supported for Celeba."
+            log_probas = nn.functional.softplus(-logits, dim=1)
+            log_reward = torch.logsumexp(log_probas[:, self.target_classes], dim=1)
+            return log_reward
+            
         logits = logits - logits.max(dim=1, keepdim=True).values
         peaked_logits = logits[:, self.target_classes]
         
@@ -198,16 +131,20 @@ class ClsReward(nn.Module):
     def build_reward(
         cls, generator_type: str, classifier_type: str, 
         target_classes, reward_type='sum', reward_dir="./"):        
-        if generator_type == 'cifar10-stylegan':
-            generator = StyleGanWrapper(
-                f'{reward_dir}/rewards/cifar10/stylegan2-cifar10-32x32.pkl'
-            )
 
-        elif generator_type == 'celeba-stylegan':
-            generator = StyleGanWrapper(
-                f'{reward_dir}/rewards/celeba/stylegan2-celebahq-256x256.pkl'
+        if generator_type in {"sg-celeba-256", "sg-ffhq-1024", "sg-metafaces-1024",
+                              "sg-cifar10-32", "sg-ffhq-256"}:
+            checkpoint = StyleGanWrapper.get_checkpoint_from_name(
+                generator_type, reward_dir
             )
-        
+            generator = StyleGanWrapper(checkpoint)
+
+        elif generator_type == "dc-ae-imagenet":
+            generator = DCAEWrapper("mit-han-lab/dc-ae-f32c32-in-1.0")
+
+        elif generator_type == "cifar10-sngan":
+            generator = CIFAR10SNGANWrapper()
+
         elif generator_type in {"mnist-gan-z10", "mnist-gan-z50"}:
             ckpt = torch.load(
                 f'{reward_dir}/rewards/mnist/{generator_type}.pt', 
@@ -216,16 +153,7 @@ class ClsReward(nn.Module):
             generator = MnistGen(**ckpt["config"])
             generator.load_state_dict(ckpt["state_dict"])
 
-        elif generator_type == "cifar10-sngan":
-            class AttrDict(dict):
-                def __getattr__(self, name):
-                    return self[name]
-            args = AttrDict(bottom_width=4, gf_dim=256, latent_dim=128)
-            generator = models.sngan_cifar10.Generator(args)
-            generator.load_state_dict(torch.load('external/sngan/sngan_cifar10.pth'))
-
-        elif generator_type in {'cifar10-gan-z50', 'cifar10-gan-z100', 
-                                'cifar10-gan-z256'}:
+        elif generator_type in {'cifar10-gan-z50', 'cifar10-gan-z100', 'cifar10-gan-z256'}:
             ckpt = torch.load(
                 f'{reward_dir}/rewards/cifar10/{generator_type}.pt',
                 map_location='cpu', weights_only=True
@@ -239,6 +167,7 @@ class ClsReward(nn.Module):
             )
 
         if classifier_type == 'cifar10-cls':
+            assert 0, "Normalisation is not handled in this classifier."
             classifier = CifarCls()
             ckpt = torch.load(
                 f'{reward_dir}/rewards/cifar10/cifar10-cls.pt', 
@@ -247,6 +176,7 @@ class ClsReward(nn.Module):
             classifier.load_state_dict(ckpt)
         
         elif classifier_type == 'mnist-cls':
+            assert 0, "Normalisation is not handled in this classifier."
             ckpt = torch.load(
                 f'{reward_dir}/rewards/mnist/mnist-cls.pth', 
                 map_location='cpu', weights_only=True
@@ -256,18 +186,25 @@ class ClsReward(nn.Module):
 
         elif classifier_type in {"cifar10-vgg13", "cifar10-vgg19", 
                                  "cifar10-resnet18", "cifar10-resnet50"}:
-            classifier = CIFAR10ClsWrapper(classifier_type)
+            classifier = CIFAR10ClsWrapper(classifier_type)    
+        
+        elif classifier_type == "celeba-cls-64":
+            checkpoint_path = f"{reward_dir}/rewards/celeba/celeba-cls-64x64.pth"
+            ckpt = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
+            classifier = CelebaCls(**ckpt['config'])
+            classifier.load_state_dict(ckpt['state_dict'])
+
+        elif classifier_type == "imagenet":
+            classifier = ImageNetClsWrapper()
+
         elif classifier_type == "faces-gender":
-            classifier = TransformersModelWrapper(
-                ViTForImageClassification,
+            classifier = ViTClsWrapper(
                 "rizvandwiki/gender-classification",
-                shape=224
             )
         elif classifier_type == "faces-emotions":
-            classifier = TransformersModelWrapper(
-                ViTForImageClassification,
+            classifier = ViTClsWrapper(
                 "trpakov/vit-face-expression",
-                shape=224
+                to_grey=True
             )
         else:
             raise NotImplementedError(f"Unknown classifier type: {classifier_type}")
@@ -275,4 +212,4 @@ class ClsReward(nn.Module):
         generator.eval()
         classifier.eval()
         
-        return cls(generator, classifier, target_classes, reward_type)
+        return cls(generator, classifier, classifier_type, target_classes, reward_type)

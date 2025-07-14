@@ -32,14 +32,16 @@ class DecoupledLangevinBuffer(LangevinReplayBuffer):
         
         self._counter += 1
         if self.is_empty():
-            x = torch.randn(self.size, dim, device=self.device)
+            shape = (self.size, *dim) \
+                if isinstance(dim, (tuple, list)) else (self.size, dim)
+            x = torch.randn(shape, device=self.device)
         else:
             x = torch.cat(self.buffer, dim=0)
             self.buffer.clear()
             
             if self.noise_start_ration > 0:
                 noise_size = int(self.size * self.noise_start_ration)
-                x[:noise_size] = torch.randn(noise_size, x.size(1), device=x.device)
+                x[:noise_size] = torch.randn(noise_size, *x.shape[1:], device=x.device)
         
         x = self.run_sampler(x)
         

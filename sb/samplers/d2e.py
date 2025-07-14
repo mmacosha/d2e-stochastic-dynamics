@@ -334,10 +334,6 @@ class D2ESB(base_class.SB):
         reward, precision = self.p1.reward.get_reward_and_precision(outputs=output)
 
         logging_dict = logging_dict | {
-            "images/x1_sample_annotated": wandb.Image(random_annotated_img),
-            "images/x1_target_class": wandb.Image(target_class_fig),
-            "images/x0_sample": wandb.Image(real_img_grid),
-            "images/x1-sample": wandb.Image(pred_img_grid), 
             "metrics/precision": precision,
             "metrics/val_mean_log_reward": reward.log().mean(),
         }
@@ -347,7 +343,7 @@ class D2ESB(base_class.SB):
             x_buffer = x_buffer.to(self.config.device)
         
         buffer_output = self.p1.reward(x_buffer)
-        fig2 = utils.plot_annotated_images(
+        buffer_samples_fig = utils.plot_annotated_images(
             buffer_output["images"][:num_img_to_log].clip(0, 1).cpu().view(image_shape),
             probas_classes=(
                 buffer_output["probas"][:num_img_to_log], 
@@ -361,10 +357,18 @@ class D2ESB(base_class.SB):
         )
 
         logging_dict = logging_dict | {
-            "images/buffer_samples": wandb.Image(fig2),
             "metrics/buffer_precision": buffer_prc,
             "metrics/buffer_reward": buffer_rwd,
         }
+
+        if sb_iter % self.config.log_img_freq == 0:
+            logging_dict = logging_dict | {
+                "images/buffer_samples": wandb.Image(buffer_samples_fig),
+                "images/x1_sample_annotated": wandb.Image(random_annotated_img),
+                "images/x1_target_class": wandb.Image(target_class_fig),
+                "images/x0_sample": wandb.Image(real_img_grid),
+                "images/x1-sample": wandb.Image(pred_img_grid), 
+            }
     
         run.log(logging_dict)
         plt.close("all")
