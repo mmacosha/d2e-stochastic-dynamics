@@ -3,18 +3,24 @@ import torchvision
 from torch import nn
 from torchvision.transforms import v2
 
+from sb.utils import import_conditionally
+
 from transformers import ViTForImageClassification, ViTImageProcessor
-from efficientvit.ae_model_zoo import DCAE_HF
+# from efficientvit.ae_model_zoo import DCAE_HF
 
-import sys, os
-sys.path.append(os.path.abspath('external/sg3'))
-sys.path.append(os.path.abspath('external/sngan'))
-sys.path.append(os.path.abspath('external/cifar10_cls'))
+# import sys, os
+# sys.path.append(os.path.abspath('external/sg3'))
+# sys.path.append(os.path.abspath('external/sngan'))
+# sys.path.append(os.path.abspath('external/cifar10_cls'))
 
-import dnnlib, legacy
-import cifar10_models.vgg as vgg
-import cifar10_models.resnet as resnet
-import models as sngan_models
+import_conditionally('external/sg3', ['dnnlib', 'legacy'])
+import_conditionally('external/cifar10_cls', ['cifar10_models'])
+import_conditionally('external/sngan', ['models'])
+
+# import dnnlib, legacy
+# import cifar10_models.vgg as vgg
+# import cifar10_models.resnet as resnet
+# import models as sngan_models
 
 from .utils import rgb_to_3ch_grey, AttrDict
 
@@ -95,14 +101,14 @@ class ViTClsWrapper(nn.Module):
 
 
 class CIFAR10ClsWrapper(nn.Module):
-    model_registry = {
-        "cifar10-vgg13": vgg.vgg13_bn,
-        "cifar10-vgg19": vgg.vgg19_bn,
-        "cifar10-resnet18": resnet.resnet18,
-        "cifar10-resnet50": resnet.resnet50
-    }
     def __init__(self, name):
         super().__init__()
+        model_registry = {
+            "cifar10-vgg13": cifar10_models.vgg.vgg13_bn,
+            "cifar10-vgg19": cifar10_models.vgg.vgg19_bn,
+            "cifar10-resnet18": cifar10_models.resnet.resnet18,
+            "cifar10-resnet50": cifar10_models.resnet.resnet50
+        }
         self.transform = v2.Compose([
             v2.Lambda(lambda x: x * 0.5 + 0.5),  # Rescale to [0, 1]
             v2.Normalize([0.4914, 0.4822, 0.4465], [0.2471, 0.2435, 0.2616])

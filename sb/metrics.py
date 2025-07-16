@@ -27,20 +27,11 @@ def compute_elbo(fwd_model, bwd_model, log_p_1, x, dt, t_max, num_t_steps, n_tra
 
 
 @torch.no_grad()
-def compute_w2_distance(true, pred):
+def compute_w2_distance(true, pred, *args, **kwargs):
     cost_matrix = torch.cdist(true, pred, p=2) ** 2
     p1 = torch.ones(true.shape[0], device=true.device) / true.shape[0]
     p2 = torch.ones(pred.shape[0], device=pred.device) / pred.shape[0]
     w2_distance = ot.emd2(p1, p2, cost_matrix)
-    return w2_distance
-
-
-@torch.no_grad()
-def compute_w2_distance(true, pred, reg=1.0):
-    cost_matrix = torch.cdist(true, pred, p=2) ** 2
-    p1 = torch.ones(true.shape[0], device=true.device) / true.shape[0]
-    p2 = torch.ones(pred.shape[0], device=pred.device) / pred.shape[0]
-    w2_distance = ot.sinkhorn2(p1, p2, cost_matrix, reg)
     return w2_distance
 
 

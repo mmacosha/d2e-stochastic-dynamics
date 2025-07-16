@@ -7,7 +7,7 @@ from sb.data import datasets
 from sb.nn import SimpleNet, DSFixedBackward
 from sb.samplers import (
     SBConfig, D2ESBConfig,
-    D2DSB, D2ESB, DiffusionSampler
+    D2DSB, D2ESB, D2ESB_2D, DiffusionSampler
 )
 
 
@@ -66,34 +66,45 @@ def run(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str,
     fwd_model = SimpleNet(**config.models.fwd).to(config.sampler.device)
     bwd_model = SimpleNet(**config.models.bwd).to(config.sampler.device)
 
-    if  config.sampler.name == 'd2d':
-        sb_config = SBConfig(**config.sampler)
-        sb_trainer = D2DSB(
-            fwd_model=fwd_model,
-            bwd_model=bwd_model,
-            p0=p0, p1=p1,
-            config=sb_config,
-        )
-    elif config.sampler.name == 'd2e':
-        sb_config = D2ESBConfig(**config.sampler)
-        sb_trainer = D2ESB(
-            fwd_model=fwd_model,
-            bwd_model=bwd_model,
-            p0=p0, p1=p1,
-            config=sb_config,
-            buffer_config=config.buffer
-        )
-    elif config.sampler.name == "ds":
-        bwd_model = DSFixedBackward(**config.models.bwd).to(config.sampler.device)
-        sb_trainer = DiffusionSampler(
-            fwd_model=fwd_model,
-            bwd_model=bwd_model,
-            p0=p0, p1=p1,
-            config=config.sampler,
-            buffer_config=config.buffer
-        )
-    else: 
-        raise NotImplementedError('this trainer is not available')
+    match config.sampler.name:
+        case'd2d':
+            sb_config = SBConfig(**config.sampler)
+            sb_trainer = D2DSB(
+                fwd_model=fwd_model,
+                bwd_model=bwd_model,
+                p0=p0, p1=p1,
+                config=sb_config,
+            )
+        case 'd2d_2d':
+            sb_config = SBConfig(**config.sampler)
+            sb_trainer = D2ESB_2D(
+                fwd_model=fwd_model,
+                bwd_model=bwd_model,
+                p0=p0, p1=p1,
+                config=sb_config,
+            )
+
+        case 'd2e':
+            sb_config = D2ESBConfig(**config.sampler)
+            sb_trainer = D2ESB(
+                fwd_model=fwd_model,
+                bwd_model=bwd_model,
+                p0=p0, p1=p1,
+                config=sb_config,
+                buffer_config=config.buffer
+            )
+        
+        case "ds":
+            bwd_model = DSFixedBackward(**config.models.bwd).to(config.sampler.device)
+            sb_trainer = DiffusionSampler(
+                fwd_model=fwd_model,
+                bwd_model=bwd_model,
+                p0=p0, p1=p1,
+                config=config.sampler,
+                buffer_config=config.buffer
+            )
+        case _: 
+            raise NotImplementedError('this trainer is not available')
     
     sb_trainer.train(config.exp, full_cfg=config)
 

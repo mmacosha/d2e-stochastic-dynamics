@@ -51,37 +51,42 @@ def log_normal_density_v2(x, mean, std):
     return - (std.log() + (x - mean).pow(2) / (2 * std.pow(2))).sum(-1)
 
 
+def compute_div(z, x):
+    e = (torch.randn_like(x) > 0).float() * 0.5 - 0.5
+    z_div, *_ = torch.autograd.grad(z, x, e, create_graph=True)
+    return z_div * e
+
+
 def compute_z_div_z(model, x, t, dt, var):
     x.requires_grad_(True)
-    z, log_var = utils.get_mean_log_var(model, x, t, dt, var, return_drift=True)
-    g = log_var.exp().sqrt()
-    e = torch.randn_like(x)
     
-    z_div = torch.autograd.grad(
-        g * z, x, grad_outputs=e, create_graph=True
-    )[0]
-    z_div = z_div * e
-    return z, z_div
+    z, _ = utils.get_model_outputs(model, x, t, dt, var)
+    g = math.sqrt(var)
+    
+    div_z = compute_div(z, x)
+    return z, g * div_z
 
 
-def make_fwd_sde_step(z, xt, dt, alpha, std):
-    drift = alpha * xt + std * z
-    return xt + drift * dt + std * math.sqrt(dt) * torch.randn_like(xt)
+def make_fwd_sde_step(z, xt, dt, alpha, g):
+    drift = alpha * xt + g * z
+    diff = g * math.sqrt(dt)
+    return xt + drift * dt + diff * torch.randn_like(xt)
 
 
-def make_bwd_sde_step(z, xt, dt, alpha, std):
-    drift = alpha * xt - std * z
-    return xt - drift * dt + std * math.sqrt(dt) * torch.randn_like(xt)
+def make_bwd_sde_step(z, xt, dt, alpha, g):
+    drift = alpha * xt - g * z
+    diff = g * math.sqrt(dt)
+    return xt - drift * dt + diff * torch.randn_like(xt)
 
 
-def compute_ot_plan(x0, x1, g, t_max):
+def compute_ot_plan(x0, x1, g, var):
     a, b = ot.unif(x0.shape[0]), ot.unif(x1.shape[0])
-    C = ot.dist(x0, x1).numpy()
+    C = ot.dist(x0, x1)
     plan = ot.sinkhorn(
         a, b, C,
         numItermax=1000,
         stopThr=1e-6,
-        reg=2 * t_max * g**2,
+        reg=2 * t_max * var,
         verbose=False
     )
     return plan
@@ -100,7 +105,7 @@ def sample_ot_map(x0, x1, plan):
     return x0[i0], x1[i1]
 
 
-def couple(x0, x1, g, t_max, device='cpu'):
-    plan = compute_ot_plan(x0, x0, g, t_max)
+def couple(x0, x1, var, t_max, device='cpu'):
+    plan = compute_ot_plan(x0, x0, var, t_max)
     x0, x1 = sample_ot_map(x0, x1, plan)
     return x0.to(device), x1.to(device)

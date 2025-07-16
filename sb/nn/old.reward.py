@@ -9,7 +9,7 @@ from sb.nn.mnist import MnistGen, MnistCLS
 from sb.nn.celeba import CelebaCls
 
 from transformers import ViTForImageClassification, ViTImageProcessor
-from efficientvit.ae_model_zoo import DCAE_HF
+# from efficientvit.ae_model_zoo import DCAE_HF
 
 import_conditionally('external/sg3', ['dnnlib', 'legacy'])
 import_conditionally('external/cifar10_cls', ['cifar10_models'])
