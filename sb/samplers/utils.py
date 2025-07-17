@@ -1,6 +1,7 @@
 import torch
 from sb.nn.utils import ModelOutput
 from sb.losses.utils import (
+    get_mean_log_var,
     get_model_outputs,
     make_fwd_sde_step, 
     make_bwd_sde_step, 
@@ -86,8 +87,17 @@ def sample_trajectory_v2(model, x, dt, t_max, num_steps, alpha, var,
 
 
 class ReferenceProcess2:
-    def __init__(self, alpha: float):
+    def __init__(self, alpha: float, dt: float, method: str):
+        self.dt = dt
         self.alpha = alpha
+        self.method = method
     
     def __call__(self, x, t):
-        return ModelOutput(drift= - self.alpha * x)
+        if self.method == 'll':
+            return ModelOutput(drift= - self.alpha * x)
+        if self.method in {'mean', 'eot'}:
+            return ModelOutput(drift=(1 - self.alpha * self.dt) *  x)
+        if self.method == 'sde':
+            return ModelOutput(drift=0)
+        if self.method == 'score':
+            return ModelOutput(drift=-self.alpha * x * self.dt)

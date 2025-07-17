@@ -3,7 +3,7 @@ import torch
 from . import utils
 
 
-def compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p1, log_p0, x0, 
+def compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p1, x, 
                                   dt, t_max, num_steps, p1_buffer = None,
                                   record_trajectory: bool = False):
     """Compute log[p_fwd p0 / p_bwd p1] for a forward trajectory. """
@@ -38,9 +38,9 @@ def compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p1, log_p0, x0,
         p1_buffer.update(xt_m_dt)
     
     x1 = xt_m_dt
-    log_diff = log_p_fwd + log_p0(x0) - (log_p_bwd + log_p1(x1))
+    log_diff = log_p_fwd - (log_p_bwd + log_p1(x1))
     
-    return log_diff, x1, trajectory
+    return log_diff
 
 
 def compute_bwd_tb_log_difference(fwd_model, bwd_model, log_p, x, dt, t_max, 
@@ -98,8 +98,9 @@ def compute_fwd_vargrad_loss(fwd_model, bwd_model, log_p1, x, dt, t_max,
                              num_t_steps, p1_buffer = None, 
                              n_trajectories: int = 2, 
                              compute_var: bool = True):
-    log = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p1, x, dt, 
-                                        t_max, num_t_steps, p1_buffer=p1_buffer)
+    log = compute_fwd_tb_log_difference(fwd_model, bwd_model, log_p1, x, 
+                                        dt, t_max, num_t_steps, 
+                                        p1_buffer=p1_buffer)
     
     if not compute_var:
         return log

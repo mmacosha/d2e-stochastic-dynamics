@@ -54,7 +54,7 @@ class D2DSB(base_class.SB):
             
             x0 = self.p0.sample(self.config.batch_size).to(self.config.device)
             x1 = self.p1.sample(self.config.batch_size).to(self.config.device)
-            loss = losses.compute_bwd_tlm_loss(
+            loss = losses.compute_bwd_tlm_loss_v2(
                 self.fwd_model, self.bwd_model, x0, x1,
                 dt, t_max, n_steps, alpha, 2, 
                 backward=True, method=self.config.matching_method)
@@ -76,9 +76,9 @@ class D2DSB(base_class.SB):
         n_steps = self.config.n_steps
         alpha = self.config.alpha
         
-        x_0 = self.p0.sample(self.config.val_batch_size).to(self.config.device)
+        x0 = self.p0.sample(self.config.val_batch_size).to(self.config.device)
         trajectory, timesteps = sutils.sample_trajectory_v2(
-            self.fwd_model, x0, dt, n_steps, t_max, alpha, 2, "fwd",
+            self.fwd_model, x0, dt, t_max, n_steps, alpha, 2, "fwd",
             return_timesteps=True, method=self.config.matching_method
         )
         trajectory = [tensor.cpu() for tensor in trajectory]
@@ -102,10 +102,11 @@ class D2DSB(base_class.SB):
         dt = self.config.dt
         t_max = self.config.t_max
         n_steps = self.config.n_steps
+        alpha = self.config.alpha
 
         x1 = self.p1.sample(self.config.val_batch_size).to(self.config.device)
         trajectory, timesteps = sutils.sample_trajectory_v2(
-            self.bwd_model, x1, dt, n_steps, t_max, alpha, 2, "bwd",
+            self.bwd_model, x1, dt, t_max, n_steps, alpha, 2, "bwd",
             return_timesteps=True, method=self.config.matching_method
         )
         trajectory = [tensor.cpu() for tensor in trajectory]

@@ -5,7 +5,7 @@ from sb.nn.cifar  import CifarGen, CifarCls
 from sb.nn.mnist  import MnistGen, MnistCLS
 from sb.nn.celeba import CelebaCls
 
-from .utils import REWARD_FUNCTIONS, renormalize
+from .utils import REWARD_FUNCTIONS
 from .reward_wrappers import (
     StyleGanWrapper, DCAEWrapper, 
     CIFAR10ClsWrapper, ViTClsWrapper,
@@ -39,7 +39,6 @@ class ClsReward(nn.Module):
 
     def forward(self, latents, beta=1.0):
         x_pred = self.generator(latents)
-        # x_pred = renormalize(x_pred)
         logits = self.classifier(x_pred) / beta
         
         if self.classifier_type in {"celeba-cls-64", "celeba-cls-32"}:
@@ -53,7 +52,7 @@ class ClsReward(nn.Module):
             'probas': probas,
             'all_probas': all_probas,
             'classes': classes,
-            'images': x_pred * 0.5 + 0.5   
+            'images': torch.clamp(x_pred * 0.5 + 0.5, 0, 1),
         }
     
     def get_reward(self, probas):

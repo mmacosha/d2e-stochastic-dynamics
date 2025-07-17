@@ -9,23 +9,17 @@ from sb.nn.mnist import MnistGen, MnistCLS
 from sb.nn.celeba import CelebaCls
 
 from transformers import ViTForImageClassification, ViTImageProcessor
-# from efficientvit.ae_model_zoo import DCAE_HF
+from efficientvit.ae_model_zoo import DCAE_HF
 
-import_conditionally('external/sg3', ['dnnlib', 'legacy'])
-import_conditionally('external/cifar10_cls', ['cifar10_models'])
-import_conditionally('external/sngan', ['models'])
+import sys
+sys.path.append("./external/sg3")
+sys.path.append("./external/cifar10_cls")
+sys.path.append("./external/sngan")
 
-
-
-# import sys
-# sys.path.append("./external/sg3")
-# sys.path.append("./external/cifar10_cls")
-# sys.path.append("./external/sngan")
-
-# import dnnlib, legacy
-# import cifar10_models.vgg as vgg
-# import cifar10_models.resnet as resnet
-# from models.sngan_cifar10 import Generator
+import dnnlib, legacy
+import cifar10_models.vgg as vgg
+import cifar10_models.resnet as resnet
+from models.sngan_cifar10 import Generator
 
 
 def _renormalize(image):

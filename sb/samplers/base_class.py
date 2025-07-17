@@ -115,7 +115,11 @@ class SB(ABC):
         self.p0 = p0
         self.p1 = p1
 
-        self.reference_process = ReferenceProcess2(self.config.alpha)
+        self.reference_process = ReferenceProcess2(
+            alpha=self.config.alpha,
+            dt=self.config.dt,
+            method=self.config.matching_method,
+        )
 
     def train(self, experiment, full_cfg=None):
         experiment.name = f"{self.config.name}-{experiment.name}"
