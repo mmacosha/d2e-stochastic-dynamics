@@ -54,7 +54,7 @@ class SBConfig:
             f"Available methods: mean, score, ll."
         
 
-def find_checkpoint(run_dir: str, checkpoint_num: int, run_id: str) -> str :
+def find_checkpoint(wandb_dir: str, checkpoint_num: int, run_id: str) -> tuple[str, int] :
     """
     Get the checkpoint file from the given directory.
     If checkpoint_num is -1, return the last checkpoint.
@@ -71,8 +71,6 @@ def find_checkpoint(run_dir: str, checkpoint_num: int, run_id: str) -> str :
     if checkpoint_num != -1:
         raise NotImplementedError("Cannot restore from a specific checkpoint.")
     
-    run_dir = Path(run_dir)
-    wandb_dir = run_dir.parent.parent
     previous_run_with_same_id = [*wandb_dir.glob(f"*{run_id}")]
     
     if not previous_run_with_same_id:
@@ -156,8 +154,8 @@ class SB(ABC):
                     self.save_checkpoint(sb_iter, run)
         
             self.save_checkpoint("final", run)
-    
-    
+            self.log_final_metric(run)
+
     def save_checkpoint(self, sb_iter: str , run):
         checkpoint_path = Path(run.dir) / 'checkpoints'
         checkpoint_path.mkdir(exist_ok=True)
@@ -173,7 +171,7 @@ class SB(ABC):
 
     def resotre_from_last_checkpoint(self, run):
         checkpoint_path, sb_step = find_checkpoint(
-            run.dir, self.config.restore_from, run.id
+            Path(run.dir).parent.parent, self.config.restore_from, run.id
         )
         
         if checkpoint_path is None:
@@ -212,4 +210,9 @@ class SB(ABC):
     @abstractmethod
     @torch.no_grad
     def log_backward_step(self, sb_iter, run):
+        pass
+
+    @abstractmethod
+    @torch.no_grad
+    def log_final_metric(self, run):
         pass

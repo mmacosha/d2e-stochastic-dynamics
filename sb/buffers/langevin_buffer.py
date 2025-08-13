@@ -129,19 +129,25 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
         dt = self.step_size
         anneal_alpha = math.exp(math.log(self.anneal_value) / self.num_steps)
         for i in trange(self.num_steps, desc='Langevin', leave=False):
-            if self.sampler in {'legacy', 'ula', 'ula2'}:
-                beta = self.beta_fn(i) if self.beta_fn else None
-                density_fn = functools.partial(self.log_density, anneal_beta=beta)
+            try:
+                if self.sampler in {'legacy', 'ula', 'ula2'}:
+                    beta = self.beta_fn(i) if self.beta_fn else None
+                    density_fn = functools.partial(self.log_density, anneal_beta=beta)
+                    
+                    y, prev_z = ula_step(density_fn, x, dt, prev_z)
+                    x = self.lmbda * x + (1 - self.lmbda) * y
+                    prev_z = prev_z if self.sampler == 'ula2' else None
                 
-                y, prev_z = ula_step(density_fn, x, dt, prev_z)
-                x = self.lmbda * x + (1 - self.lmbda) * y
-                prev_z = prev_z if self.sampler == 'ula2' else None
-            
-            elif self.sampler == 'mala':
-                x = mala_step(self.log_density, x, dt)
+                elif self.sampler == 'mala':
+                    x = mala_step(self.log_density, x, dt)
 
-            else:
-                raise ValueError('Unknown method')
+                else:
+                    raise ValueError('Unknown method')
+            except ValueError as e:
+                raise ValueError(
+                    f"Error during Langevin sampling at step {i}/{self.num_steps}: {e}. "
+                    "Please check your log_density function."
+                ) from e
             
             dt *= anneal_alpha
             

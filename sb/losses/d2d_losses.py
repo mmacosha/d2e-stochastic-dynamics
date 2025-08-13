@@ -67,12 +67,67 @@ def compute_bwd_tlm_loss(fwd_model, bwd_model, x_0, dt, t_max, n_steps,
     return traj_loss
 
 
+def sf2m_loss(fwd_model, x0, x1, var):
+    fwd_model.train()
+
+    t = torch.rand(x0.size(0), 1, device=x0.device)
+
+    z = torch.randn_like(x0)
+    xt = t * x1 + (1 - t) * x0 + torch.sqrt(var * t * (1 - t)) * z    
+    target_drift = (x1 - x0) + (xt - t * x1 - (1 - t) * x0) * (1 - 2 * t) / (t * (1 - t)).clip(1e-6)
+    lmbda = 2 * (t * (1 - t) / var).sqrt()
+
+    output = fwd_model(xt, t.squeeze(1))
+    drift_loss = (target_drift - output.drift).pow(2).sum(1)
+    score_loss = (lmbda * output.log_var + z).pow(2).sum(1)
+
+    return (drift_loss + score_loss).mean()
+
+
 def compute_fwd_tlm_loss_v2(fwd_model, bwd_model, x0, x1, 
-                         dt, t_max, num_steps, alpha, var,
-                         backward: bool = True, method: str = "ll"):
+                            dt, t_max, num_steps, alpha, var,
+                            begin: bool = False,
+                            backward: bool = True, 
+                            method: str = "ll"):
     r"""Compute forward trajectory likelihood."""
-    if method == "eot":
+    if method in {"eot", "sf2m"}:
         x0, x1 = utils.couple(x0, x1, var, t_max, device=x0.device)
+
+    if method in {"dsbm", "dsbm++"}:
+        with torch.no_grad():
+            x0 = x1.clone()
+            for t_step in torch.linspace(t_max, dt, num_steps):
+                z = torch.randn_like(x0)
+                t = torch.ones(x0.size(0), device=x0.device) * t_step
+                if begin:
+                    x0 = x0 + alpha * x0 * dt + math.sqrt(var * dt) * z
+                else:
+                    x0 = x0 - (alpha * x0 + bwd_model(x0, t).drift) * dt + \
+                         math.sqrt(var * dt) * z
+        
+        if method == "dsbm++":
+            x0, x1 = utils.couple(x0, x1, var, t_max, device=x0.device)
+
+        noise = torch.randn_like(x0)
+        t = torch.rand(x0.size(0), 1, device=x0.device) * t_max
+        xt = (t / t_max) * x1 + (1 - t / t_max) * x0 + \
+             noise * (var * t * (1 - t / t_max)).sqrt()
+        
+        target_score = (x1 - xt) / (t_max - t)
+        loss = (target_score - fwd_model(xt, t.squeeze(1)).drift).pow(2).mean()
+        
+        if backward:
+            loss.mean().backward()
+
+        return loss
+
+    if method == "sf2m":
+        loss = sf2m_loss(fwd_model, x0, x1, t_max * var)
+        
+        if backward:
+            loss.mean().backward()
+        
+        return loss
 
     xt = x1
     traj_loss = 0
@@ -154,8 +209,46 @@ def compute_fwd_tlm_loss_v2(fwd_model, bwd_model, x0, x1,
 
 def compute_bwd_tlm_loss_v2(fwd_model, bwd_model,  x0, x1, 
                             dt, t_max, num_steps, alpha, var,
-                            backward: bool = True, method: str = "ll"):
+                            begin: bool = False,
+                            backward: bool = True, 
+                            method: str = "ll"):
     r"""Compute backward trajectory likelihood."""
+    if method in {"eot", "sf2m"}:
+        x0, x1 = utils.couple(x0, x1, var, t_max, device=x0.device)
+
+    if method in {"dsbm", "dsbm++"}:
+        x1 = x0.clone()
+        with torch.no_grad():
+            for t_step in torch.linspace(0, t_max - dt, num_steps):
+                z = torch.randn_like(x1)
+                t = torch.ones(z.size(0), device=z.device) * t_step
+                if begin:
+                    x1 = x1 + (- alpha * x1) * dt + math.sqrt(var * dt) * z
+                else:
+                    x1 = x1 + (- alpha * x1 + fwd_model(x1, t).drift) * dt + \
+                         math.sqrt(var * dt) * z
+                    
+        if method == "dsbm++":
+            x0, x1 = utils.couple(x0, x1, var, t_max, device=x0.device)
+
+        noise = torch.randn_like(x0)
+        t = torch.rand(x0.size(0), 1, device=x0.device) * t_max
+        xt = x1 * (t / t_max) + (1 - t / t_max) * x0 + \
+             noise * (var * t * (1 - t / t_max)).sqrt()
+        
+        target_score = (xt - x0) / t.clip(1e-6)
+        loss = (target_score - bwd_model(xt, t.squeeze(1)).drift).pow(2).mean()
+
+        if backward:
+            loss.mean().backward()
+
+        return loss
+    
+    if method == "sf2m":
+        raise ValueError(
+            "Backward model should not be used for SF2M training"
+        )    
+    
     xt_m_dt = x0
     traj_loss = 0
 
@@ -226,6 +319,7 @@ def compute_bwd_tlm_loss_v2(fwd_model, bwd_model,  x0, x1,
 
         if backward:
             loss.mean().backward()
+        
         traj_loss = traj_loss + loss.mean()
         xt_m_dt = xt
     

@@ -1,3 +1,4 @@
+import math
 import torch
 from sb.nn.utils import ModelOutput
 from sb.losses.utils import (
@@ -47,9 +48,9 @@ def sample_trajectory(model, x_start, direction, dt, n_steps, t_max,
 
 
 @torch.no_grad()
-def sample_trajectory_v2(model, x, dt, t_max, num_steps, alpha, var, 
-                      direction="fwd", only_last: bool = False, 
-                      return_timesteps: bool = False, method: str = "ll"):
+def sample_trajectory_v2(fwd_model, bwd_model, x, dt, t_max, num_steps, alpha, var, 
+                         direction="fwd", only_last: bool = False, 
+                         return_timesteps: bool = False, method: str = "ll"):
     assert direction in {"fwd", "bwd"}
     trajectory = [x]
     
@@ -57,20 +58,56 @@ def sample_trajectory_v2(model, x, dt, t_max, num_steps, alpha, var,
     for t_step in (timesteps if direction == "fwd" else timesteps.flip(-1))[:-1]:
         t = torch.ones(x.size(0), device=x.device) * t_step
         x = trajectory[-1]
-        model_output, std = get_model_outputs(model, x, t, dt, base_var=var)
         
         if method == 'eot':
+            model = fwd_model if direction == "fwd" else bwd_model
+            model_output, std = get_model_outputs(model, x, t, dt, base_var=var)
             x = model_output + std * torch.randn_like(model_output)
+        
         elif method == "ll":
+            model = fwd_model if direction == "fwd" else bwd_model
+            model_output, std = get_model_outputs(model, x, t, dt, base_var=var)
             x = x + model_output * dt + std * torch.randn_like(model_output)
+        
         elif method == "mean":
+            model = fwd_model if direction == "fwd" else bwd_model
+            model_output, std = get_model_outputs(model, x, t, dt, base_var=var)
             x = model_output + std * torch.randn_like(model_output)
+        
         elif method == "score":
+            model = fwd_model if direction == "fwd" else bwd_model
+            model_output, std = get_model_outputs(model, x, t, dt, base_var=var)
             x = x + model_output + std * torch.randn_like(model_output)
+        
+        elif method == "sf2m":
+            var_ = t_max * var
+            t_ = t * (1 - 1 / num_steps) / (t_max - dt)
+            dt_ = 1 / num_steps
+
+            output = fwd_model(x, t_)
+            if direction == "fwd":
+                drift = output.drift + var_ / 2 * output.log_var
+                x = x + drift * dt_ + math.sqrt(var_ * dt_) * torch.randn_like(drift)
+            else:   
+                drift = output.drift - var_ / 2 * output.log_var
+                x = x - drift * dt_ + math.sqrt(var_ * dt_) * torch.randn_like(drift)
+        
+        elif method in {"dsbm", "dsbm++"}:
+            if direction == "fwd":
+                x = x + (- alpha * x + fwd_model(x, t).drift) * dt + \
+                    math.sqrt(var * dt) * torch.randn_like(x)
+            else:
+                x = x - (alpha * x + bwd_model(x, t).drift) * dt + \
+                    math.sqrt(var * dt) * torch.randn_like(x)
+        
         elif method == "sde":
-            step_fn = make_fwd_sde_step if direction == "fwd" else make_bwd_sde_step
             g = math.sqrt(var)
-            x = step_fn(model_output, x, dt, alpha, g)
+            if direction == "fwd":
+                z = fwd_model(x, t).drift
+                x = make_fwd_sde_step(z, x, dt, alpha, g)
+            else:
+                z = bwd_model(x, t).drift
+                x = make_bwd_sde_step(z, x, dt, alpha, g)
         
         trajectory.append(x)
 

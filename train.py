@@ -1,3 +1,9 @@
+import os
+import random
+
+import torch
+import numpy as np
+
 import click
 import regex as re
 from hydra import initialize, compose
@@ -18,6 +24,41 @@ def read_overrides(overrides):
     return re.findall(pattern, overrides)
 
 
+def seed_everything(seed: int = 42):
+    """
+    Set random seeds for reproducibility across Python, NumPy, and PyTorch (CPU & CUDA).
+
+    Args:
+        seed (int): Random seed to use.
+    """
+    # Python's built-in RNG
+    random.seed(seed)
+
+    # NumPy RNG
+    np.random.seed(seed)
+
+    # PyTorch RNGs
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if using multi-GPU
+
+    # Ensure deterministic behavior in cuDNN
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    # Force deterministic algorithms (will throw if unsupported ops are used)
+    torch.use_deterministic_algorithms(True)
+
+    # Environment variables for reproducibility
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"  # required for reproducibility with cuBLAS
+
+    print(f"Seed set to {seed} (deterministic mode ON)")
+
+# Example usage:
+# seed_everything(123)
+
+
 @click.command()
 @click.option('--cfg_path',     "cfg_path",  type=click.Path(exists=True), default='configs')
 @click.option("--cfg",          "cfg",       type=click.STRING, default='config')
@@ -25,10 +66,12 @@ def read_overrides(overrides):
 @click.option("--run_id",       "run_id",    type=click.STRING, default=None)
 @click.option("--wandb",        "wandb",     type=click.STRING, default='online')
 @click.option("--device",       "device",    type=click.INT, default=0)
+@click.option("--seed",         "seed",      type=click.INT, default=42 )
 @click.option("--debug",        "debug",     type=click.BOOL, default=False, is_flag=True)
 @click.option("--overrides",    "overrides", type=click.STRING, default=None,)
 def run(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str, 
-        device: int, debug: bool, overrides=None):
+        device: int, seed: int, debug: bool, overrides=None):
+    seed_everything(seed)
     with initialize(version_base=None, config_path=cfg_path):
         overrides = read_overrides(overrides)
         
@@ -42,22 +85,24 @@ def run(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str,
 
         if debug:
             print("\nATTENTION: DEBUG MODE IS ON!\n")
+            print("SOME PARAMETERS CAN:")
             config.exp.mode = 'disabled'
             config.exp.name = f'debug-run-{config.exp.name}'
             config.sampler.num_fwd_steps=10
             config.sampler.num_bwd_steps=10
-            config.sampler.n_sb_iter = 2
+            config.sampler.num_sb_steps = 2
         else:
             config.exp.id = run_id 
             config.exp.mode = wandb
-            config.exp.name = name if name else config.exp.name
+            config.exp.name = f"{name if name else config.exp.name}-{seed=}"
         
         config.sampler.device = f"cuda:{device}"
 
-    if config.sampler.matching_method in {"score", "mean"} and \
+    if config.sampler.matching_method not in  {'ll', 'sf2m'} and \
        (config.models.fwd.predict_log_var or config.models.bwd.predict_log_var):
         raise ValueError(
-            "Matching method 'score' and 'mean' do not support tainable variance."
+            f"Matching method {config.sampler.matching_method} " \
+            "do not support tainable variance."
         )
     
     p0 = datasets[config.data.p_0.name](**config.data.p_0.args)

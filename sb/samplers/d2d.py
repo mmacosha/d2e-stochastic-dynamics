@@ -25,10 +25,13 @@ class D2DSB(base_class.SB):
 
             x0 = self.p0.sample(self.config.batch_size).to(self.config.device)
             x1 = self.p1.sample(self.config.batch_size).to(self.config.device)
+            
             loss = losses.compute_fwd_tlm_loss_v2(
                 self.fwd_model, self.bwd_model, x0, x1, 
                 dt, t_max, n_steps, alpha, 2, 
-                backward=True, method=self.config.matching_method
+                begin=sb_iter==0 and not self.config.backward_first,
+                backward=True, 
+                method=self.config.matching_method
             )
 
             run.log({
@@ -54,10 +57,14 @@ class D2DSB(base_class.SB):
             
             x0 = self.p0.sample(self.config.batch_size).to(self.config.device)
             x1 = self.p1.sample(self.config.batch_size).to(self.config.device)
+
             loss = losses.compute_bwd_tlm_loss_v2(
                 self.fwd_model, self.bwd_model, x0, x1,
                 dt, t_max, n_steps, alpha, 2, 
-                backward=True, method=self.config.matching_method)
+                begin=sb_iter==0 and self.config.backward_first,
+                backward=True, 
+                method=self.config.matching_method
+            )
             
             run.log({
                 "train/backward_loss": loss / n_steps,
@@ -78,20 +85,31 @@ class D2DSB(base_class.SB):
         
         x0 = self.p0.sample(self.config.val_batch_size).to(self.config.device)
         trajectory, timesteps = sutils.sample_trajectory_v2(
-            self.fwd_model, x0, dt, t_max, n_steps, alpha, 2, "fwd",
-            return_timesteps=True, method=self.config.matching_method
+            self.fwd_model, self.bwd_model, 
+            x0, dt, t_max, n_steps, alpha, 2, 
+            direction="fwd",
+            return_timesteps=True, 
+            method=self.config.matching_method
         )
+
         trajectory = [tensor.cpu() for tensor in trajectory]
         figure = utils.plot_trajectory(
-            trajectory, timesteps, title=f"Forward Process, step={sb_iter}",
-            limits=(-3, 3)
+            trajectory, timesteps, 
+            title=f"Forward Process, step={sb_iter}",
+            limits=(-2, 2)
         )
         x1_true = self.p1.sample(self.config.val_batch_size).to(self.config.device)
         W2 = metrics.compute_w2_distance(
             x1_true,  trajectory[-1].to(self.config.device)
         )
+        path_energy = metrics.compute_path_energy_discrete(
+            self.fwd_model, 
+            x0, dt, t_max, n_steps, alpha, 2, 
+            self.config.matching_method
+        )
         run.log({
             "metrics/W2": W2,
+            "metrics/path_energy": path_energy,
             "images/forward_trajectory": wandb.Image(figure), 
             "sb_iter": sb_iter
         })
@@ -106,12 +124,16 @@ class D2DSB(base_class.SB):
 
         x1 = self.p1.sample(self.config.val_batch_size).to(self.config.device)
         trajectory, timesteps = sutils.sample_trajectory_v2(
-            self.bwd_model, x1, dt, t_max, n_steps, alpha, 2, "bwd",
-            return_timesteps=True, method=self.config.matching_method
+            self.fwd_model, self.bwd_model,
+            x1, dt, t_max, n_steps, alpha, 2, 
+            direction="bwd",
+            return_timesteps=True, 
+            method=self.config.matching_method
         )
         trajectory = [tensor.cpu() for tensor in trajectory]
         figure = utils.plot_trajectory(
-            trajectory[::-1], timesteps[::-1], title=f"Backward Process, step={sb_iter}",
+            trajectory[::-1], timesteps[::-1], 
+            title=f"Backward Process, step={sb_iter}",
             limits=(-2, 2)
         )
         run.log({
@@ -119,3 +141,35 @@ class D2DSB(base_class.SB):
             "sb_iter": sb_iter
         })
         plt.close(figure)
+
+    @torch.no_grad()
+    def log_final_metric(self, run):
+        dt = self.config.dt
+        t_max = self.config.t_max
+        n_steps = self.config.n_steps
+        alpha = self.config.alpha
+        
+        x0 = self.p0.sample(self.config.val_batch_size).to(self.config.device)
+        x1_pred = sutils.sample_trajectory_v2(
+            self.fwd_model, self.bwd_model, 
+            x0, dt, t_max, n_steps, alpha, 2, 
+            direction="fwd",
+            only_last=True,
+            return_timesteps=False, 
+            method=self.config.matching_method
+        )
+        x1_true = self.p1.sample(self.config.val_batch_size).to(self.config.device)
+        W2 = metrics.compute_w2_distance(
+            x1_true,  x1_pred.to(self.config.device)
+        )
+        path_energy = metrics.compute_path_energy_discrete(
+            self.fwd_model, 
+            x0, dt, t_max, n_steps, alpha, 2, 
+            self.config.matching_method
+        )
+        final_metrics = {
+            "p1_W2": W2,
+            "path_energy": path_energy,
+        }
+        for k, v in final_metrics.items():
+            wandb.run.summary[k] = v

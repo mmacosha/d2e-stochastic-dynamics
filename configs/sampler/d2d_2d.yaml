@@ -5,14 +5,14 @@ log_fwd_freq: 1
 log_bwd_freq: 1
 
 # training
-num_sb_steps: 20
 batch_size: 128
 val_batch_size: 10000
 backward_first: true
 fwd_optim_lr: 8e-4
 bwd_optim_lr: 8e-4
-num_fwd_steps: 500
-num_bwd_steps: 500
+num_sb_steps: 20
+num_fwd_steps: 4000
+num_bwd_steps: 4000
 fwd_ema_decay: 0.0
 bwd_ema_decay: 0.0
 matching_method: ll

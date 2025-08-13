@@ -60,7 +60,7 @@ def compute_div(z, x):
 def compute_z_div_z(model, x, t, dt, var):
     x.requires_grad_(True)
     
-    z, _ = utils.get_model_outputs(model, x, t, dt, var)
+    z = model(x, t).drift
     g = math.sqrt(var)
     
     div_z = compute_div(z, x)
@@ -79,8 +79,9 @@ def make_bwd_sde_step(z, xt, dt, alpha, g):
     return xt - drift * dt + diff * torch.randn_like(xt)
 
 
-def compute_ot_plan(x0, x1, g, var):
-    a, b = ot.unif(x0.shape[0]), ot.unif(x1.shape[0])
+def compute_ot_plan(x0, x1, var, t_max):
+    a = torch.ones(x0.shape[0], device=x0.device) / x0.shape[0]
+    b = torch.ones(x0.shape[0], device=x0.device) / x1.shape[0]
     C = ot.dist(x0, x1)
     plan = ot.sinkhorn(
         a, b, C,
@@ -93,6 +94,7 @@ def compute_ot_plan(x0, x1, g, var):
 
 
 def sample_ot_map(x0, x1, plan):
+    plan = plan.cpu().numpy()
     p = plan.flatten() / plan.sum()
     choices = np.random.choice(
         x0.shape[0] * x1.shape[0],

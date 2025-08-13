@@ -91,6 +91,9 @@ class D2ESB(base_class.SB):
             raise ValueError(f"Buffer is unknow: {buffer_config.buffer_type}")
 
     def train_backward_step(self, sb_iter, run):
+        self.bwd_model.train()
+        self.fwd_model.eval()
+
         dt = self.config.dt
         t_max = self.config.t_max
         n_steps = self.config.n_steps
@@ -116,6 +119,9 @@ class D2ESB(base_class.SB):
         self.fwd_model_ema.restore()
 
     def train_forward_step(self, sb_iter, run):
+        self.fwd_model.train()
+        self.bwd_model.eval()
+
         dt = self.config.dt
         t_max = self.config.t_max
         n_steps = self.config.n_steps
@@ -199,9 +205,10 @@ class D2ESB(base_class.SB):
             elif n_trajectories == 0:
                 assert not isinstance(x0, tuple), "if n_trajectories < 2, " \
                                                   "bwd_trajectory should not be reused"
-                loss = losses.compute_fwd_tlm_loss(self.fwd_model, self.bwd_model,
-                                                   x1, dt, t_max, n_steps,
-                                                   backward=True, matching_method="ll")
+                loss = losses.compute_fwd_tlm_loss(
+                    self.fwd_model, self.bwd_model, x1, dt, t_max, n_steps,
+                    backward=True, matching_method="ll"
+                )
             else:
                 density_fn = functools.partial(self.p1.log_density, anneal_beta=beta)
                 if self.config.reuse_bwd_trajectory:
@@ -264,6 +271,7 @@ class D2ESB(base_class.SB):
 
     @torch.no_grad()
     def log_forward_step(self, sb_iter, run):
+        self.fwd_model.eval()
         dt = self.config.dt
         t_max = self.config.t_max
         n_steps = self.config.n_steps
@@ -273,11 +281,18 @@ class D2ESB(base_class.SB):
 
         # sample x0 and compute metrics
         x0 = self.p0.sample(val_batch_size).to(device)
-        elbo, iw_1, iw_2 = metrics.compute_elbo(self.fwd_model, self.bwd_model, 
-                                                self.p1.log_density, x0, dt, 
-                                                t_max, n_steps, n_traj=16)
+        elbo, iw_1, iw_2 = metrics.compute_elbo(
+            self.fwd_model, self.bwd_model, self.p1.log_density, 
+            x0, dt, t_max, n_steps, n_traj=16
+        )
+        eubo = metrics.compute_eubo(
+            self.fwd_model, self.bwd_model, self.p1.log_density, 
+            x0, dt, t_max, n_steps
+        )
+
         logging_dict = {
-            "metrics/p1_elbo": elbo, 
+            "metrics/p1_elbo": elbo,
+            "metrics/p1_eubo": eubo,
             "metrics/p1_iw_1": iw_1, 
             "metrics/p1_iw_2": iw_2,
             "sb_iter": sb_iter,

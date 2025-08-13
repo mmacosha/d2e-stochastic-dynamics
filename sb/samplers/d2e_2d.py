@@ -76,3 +76,5 @@ class D2ESB_2D(d2e.D2ESB):
         
         run.log({"images/backward_trajectory": wandb.Image(figure), "sb_iter": sb_iter})
         plt.close(figure)
+
+
