@@ -52,7 +52,7 @@ def log_normal_density_v2(x, mean, std):
 
 
 def compute_div(z, x):
-    e = (torch.randn_like(x) > 0).float() * 0.5 - 0.5
+    e = (torch.randn_like(x) > 0).float() * 2 - 1
     z_div, *_ = torch.autograd.grad(z, x, e, create_graph=True)
     return z_div * e
 
@@ -68,13 +68,13 @@ def compute_z_div_z(model, x, t, dt, var):
 
 
 def make_fwd_sde_step(z, xt, dt, alpha, g):
-    drift = alpha * xt + g * z
+    drift = - alpha * xt + g * z
     diff = g * math.sqrt(dt)
     return xt + drift * dt + diff * torch.randn_like(xt)
 
 
 def make_bwd_sde_step(z, xt, dt, alpha, g):
-    drift = alpha * xt - g * z
+    drift = - alpha * xt - g * z
     diff = g * math.sqrt(dt)
     return xt - drift * dt + diff * torch.randn_like(xt)
 

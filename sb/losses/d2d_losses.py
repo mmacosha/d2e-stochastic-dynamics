@@ -74,7 +74,8 @@ def sf2m_loss(fwd_model, x0, x1, var):
 
     z = torch.randn_like(x0)
     xt = t * x1 + (1 - t) * x0 + torch.sqrt(var * t * (1 - t)) * z    
-    target_drift = (x1 - x0) + (xt - t * x1 - (1 - t) * x0) * (1 - 2 * t) / (t * (1 - t)).clip(1e-6)
+    target_drift = (x1 - x0) + \
+                   (xt - t * x1 - (1 - t) * x0) * (1 - 2 * t) / (t * (1 - t)).clip(1e-6)
     lmbda = 2 * (t * (1 - t) / var).sqrt()
 
     output = fwd_model(xt, t.squeeze(1))
@@ -147,6 +148,7 @@ def compute_fwd_tlm_loss_v2(fwd_model, bwd_model, x0, x1,
                 fwd_model, xt_m_dt, t - dt, dt, base_var=var
             )
             loss = F.mse_loss(fwd_mean, target)
+        
         elif method == "ll":
             with torch.no_grad():
                 bwd_drift, bwd_std = utils.get_model_outputs(
@@ -158,6 +160,7 @@ def compute_fwd_tlm_loss_v2(fwd_model, bwd_model, x0, x1,
                 fwd_model, xt_m_dt, t - dt, dt, base_var=var
             )
             loss = - utils.log_normal_density_v2(xt, xt_m_dt + fwd_drift * dt, fwd_std)
+        
         elif method == "mean":
             with torch.no_grad():
                 bwd_mean, bwd_std = utils.get_model_outputs(
@@ -172,6 +175,7 @@ def compute_fwd_tlm_loss_v2(fwd_model, bwd_model, x0, x1,
                 fwd_model, xt_m_dt, t - dt, dt, var
             )
             loss = F.mse_loss(fwd_mean, xt_m_dt + bwd_mean - bwd_mean_new)
+        
         elif method == "score":
             with torch.no_grad():
                 bwd_drift_dt, bwd_std = utils.get_model_outputs(
@@ -187,11 +191,10 @@ def compute_fwd_tlm_loss_v2(fwd_model, bwd_model, x0, x1,
                 fwd_model, xt_m_dt, t - dt, dt, var
             )
             loss = F.mse_loss(fwd_drift_dt, target)   
+        
         elif method == "sde":
             with torch.no_grad():
-                z, _ = utils.get_model_outputs(
-                    bwd_model, xt, t, dt, base_var=var
-                )
+                z = bwd_model(xt, t).drift
                 g = math.sqrt(var)
                 xt_m_dt = utils.make_bwd_sde_step(z, xt, dt, alpha, g)
 
@@ -266,6 +269,7 @@ def compute_bwd_tlm_loss_v2(fwd_model, bwd_model,  x0, x1,
                 bwd_model, xt, t, dt, base_var=var
             )
             loss = F.mse_loss(bwd_mean, xt_m_dt)
+        
         elif method == "ll":
             with torch.no_grad():
                 fwd_drift, fwd_std = utils.get_model_outputs(
@@ -277,6 +281,7 @@ def compute_bwd_tlm_loss_v2(fwd_model, bwd_model,  x0, x1,
                 bwd_model, xt, t, dt, base_var=var
             )
             loss = - utils.log_normal_density_v2(xt_m_dt, xt + bwd_drift * dt, bwd_std)   
+        
         elif method == "mean":
             with torch.no_grad():
                 fwd_mean, fwd_std = utils.get_model_outputs(
@@ -291,6 +296,7 @@ def compute_bwd_tlm_loss_v2(fwd_model, bwd_model,  x0, x1,
                 bwd_model, xt, t, dt, base_var=var
             )
             loss = F.mse_loss(bwd_mean, xt + fwd_mean - fwd_mean_new)
+        
         elif method == "score":
             with torch.no_grad():
                 fwd_drift_dt, fwd_std = utils.get_model_outputs(
@@ -306,11 +312,10 @@ def compute_bwd_tlm_loss_v2(fwd_model, bwd_model,  x0, x1,
                 bwd_model, xt, t, dt, base_var=var
             )
             loss = F.mse_loss(bwd_mean, target)
+        
         elif method == "sde":
             with torch.no_grad():
-                z, _ = utils.get_model_outputs(
-                    fwd_model, xt_m_dt, t - dt, dt, base_var=var
-                )
+                z = fwd_model(xt_m_dt, t - dt).drift
                 g = math.sqrt(var)
                 xt = utils.make_fwd_sde_step(z, xt_m_dt, dt, alpha, g)
             

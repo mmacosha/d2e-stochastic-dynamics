@@ -88,8 +88,10 @@ def compute_path_energy_discrete(fwd_model, x0, dt, t_max, n_steps, alpha, var,
 
         if method == "mean":
             fwd_mean, fwd_var = output.drift, ref_var
+        
         elif method == "score":
             fwd_mean, fwd_var = x + output.drift, ref_var
+        
         elif method == "ll":
             fwd_mean = x + output.drift * dt
             log_var = torch.log(torch.ones_like(x) * var * dt)
@@ -101,6 +103,7 @@ def compute_path_energy_discrete(fwd_model, x0, dt, t_max, n_steps, alpha, var,
         
         elif method == "eot":
             fwd_mean, fwd_var = output.drift, ref_var
+        
         elif method == "sf2m":
             var_ = t_max * var
             t_ = t * (1 - 1 / n_steps) / (t_max - dt)
@@ -108,17 +111,20 @@ def compute_path_energy_discrete(fwd_model, x0, dt, t_max, n_steps, alpha, var,
             
             output = fwd_model(x, t_)
             fwd_mean = x + (output.drift + var_ / 2 * output.log_var) * dt_
-            fwd_var = var_ * dt
+            fwd_var = torch.as_tensor(var_ * dt)
 
             ref_mean = x
-            ref_var = var_ * dt
+            ref_var = torch.as_tensor(var_ * dt)
+        
         elif method in {"dsbm", "dsbm++"}:
             fwd_mean = x + (- alpha * x + output.drift) * dt
             fwd_var = ref_var
+        
         elif method == "sde":
             g = math.sqrt(var)
-            fwd_mean = x + (alpha * x + g * output.drift) * dt
+            fwd_mean = x + ( - alpha * x + g * output.drift) * dt
             fwd_var = ref_var
+        
         else:
             raise NotImplementedError(f"Unknown method: {method}")
         

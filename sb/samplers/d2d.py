@@ -171,5 +171,8 @@ class D2DSB(base_class.SB):
             "p1_W2": W2,
             "path_energy": path_energy,
         }
+
+        wandb.log(final_metrics)
+
         for k, v in final_metrics.items():
             wandb.run.summary[k] = v
