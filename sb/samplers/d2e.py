@@ -47,7 +47,6 @@ class D2ESBConfig(base_class.SBConfig):
     num_img_to_log: int = 36
     off_policy_fraction: float = 0.25
     start_mixed_from: int = 0
-    val_batch_size: int = 64
     watch_models: bool = False
     anneal_beta_fn: str = None
     reuse_bwd_trajectory: bool = False
@@ -74,7 +73,7 @@ class D2ESB(base_class.SB):
             if self.config.anneal_beta_fn else None
         
         if buffer_config.buffer_type == 'simple':
-            self.p1_buffer = ReplayBuffer(**config.buffer, device=self.config.device)
+            self.p1_buffer = ReplayBuffer(**buffer_config, device=self.config.device)
         elif buffer_config.buffer_type == "langevin":
             self.p1_buffer = LangevinReplayBuffer(
                 p1=self.p1, 
@@ -124,6 +123,7 @@ class D2ESB(base_class.SB):
 
         dt = self.config.dt
         t_max = self.config.t_max
+        alpha = self.config.alpha
         n_steps = self.config.n_steps
 
         device = self.config.device
@@ -169,7 +169,7 @@ class D2ESB(base_class.SB):
                         only_last=True
                     )
 
-            elif self.config.off_policy_fraction > 0:
+            elif self.config.off_policy_fraction > 0: # and sb_iter > 0:
                 num_off_policy_samples = int(
                     self.config.off_policy_fraction * (_batch_size)
                 )
@@ -186,12 +186,14 @@ class D2ESB(base_class.SB):
                         )
                 else:
                     x0_off = sutils.sample_trajectory(
-                        self.bwd_model, x1,"backward", dt, n_steps, t_max, 
+                        self.bwd_model,
+                        x1, dt, t_max, n_steps, alpha, var=2.0,
+                        direction='bwd',
                         only_last=True
                     )
 
                 x0_on = x0[:_batch_size - num_off_policy_samples].to(device)
-                x0 = (x0_off, x0_on)
+                x0 = (x0_off, x0_on)   
 
             # compute forward loss
             if n_trajectories == 1:
@@ -202,15 +204,20 @@ class D2ESB(base_class.SB):
                     self.fwd_model, self.bwd_model, density_fn, 
                     self.p0.log_density, x0, dt, t_max, n_steps, 
                     p1_buffer=self.p1_buffer)
+            
             elif n_trajectories == 0:
                 assert not isinstance(x0, tuple), "if n_trajectories < 2, " \
                                                   "bwd_trajectory should not be reused"
                 loss = losses.compute_fwd_tlm_loss(
-                    self.fwd_model, self.bwd_model, x1, dt, t_max, n_steps,
-                    backward=True, matching_method="ll"
+                    self.fwd_model, self.bwd_model, 
+                    x1, dt, t_max, n_steps,
+                    backward=True, 
+                    matching_method=self.config.matching_method,
                 )
+            
             else:
                 density_fn = functools.partial(self.p1.log_density, anneal_beta=beta)
+                
                 if self.config.reuse_bwd_trajectory:
                     x0_off, x0_on = x0
                     x0_off = x0_off.repeat(n_trajectories - 1, 1) 
@@ -240,19 +247,28 @@ class D2ESB(base_class.SB):
                     loss = (log  - log.mean(0, keepdim=True).detach()).pow(2).mean()
                 
                 else:
-                    x0 = torch.cat(x0, dim=0).repeat(n_trajectories, 1) 
+                    if isinstance(x0, tuple):
+                        x0 = torch.cat(x0, dim=0).repeat(n_trajectories, 1) 
+                    
                     loss = losses.compute_fwd_vargrad_loss(
-                        self.fwd_model, self.bwd_model, density_fn, 
+                        self.fwd_model, self.bwd_model, 
+                        density_fn, 
                         x0, dt, t_max, n_steps, 
-                        p1_buffer=self.p1_buffer, n_trajectories=n_trajectories
+                        p1_buffer=self.p1_buffer, 
+                        n_trajectories=n_trajectories
                     )
             
             with torch.no_grad():
                 x0 = self.p0.sample(self.config.val_batch_size).to(device)
+                
                 x1 = sutils.sample_trajectory(
-                    self.fwd_model, x0, "forward", dt, n_steps, t_max, only_last=True
+                    self.fwd_model,
+                    x0, dt, t_max, n_steps, alpha, var=2.0,
+                    direction="fwd",
+                    only_last=True,
+                    method=self.config.matching_method,
                 )
-                log_reward = self.p1.reward.log_reward(x1).mean()
+                mean_log_reward = self.p1.get_mean_log_reward(x1).mean()
             
             if n_trajectories > 0:
                 loss.backward()
@@ -262,132 +278,47 @@ class D2ESB(base_class.SB):
 
             run.log({
                 "train/forward_loss": loss / n_steps,
-                "metrics/mean_log_reward": log_reward,
+                "metrics/mean_log_reward": mean_log_reward,
                 "fwd_step": sb_iter * self.config.num_fwd_steps + step_iter
             })
         
-        torch.cuda.empty_cache()
         self.bwd_model_ema.restore()
 
     @torch.no_grad()
-    def log_forward_step(self, sb_iter, run):
-        self.fwd_model.eval()
+    def log_backward_step(self, sb_iter, run):
         dt = self.config.dt
         t_max = self.config.t_max
         n_steps = self.config.n_steps
-        val_batch_size = self.config.val_batch_size
-        device = self.config.device
-        num_img_to_log = self.config.num_img_to_log
 
-        # sample x0 and compute metrics
-        x0 = self.p0.sample(val_batch_size).to(device)
-        elbo, iw_1, iw_2 = metrics.compute_elbo(
-            self.fwd_model, self.bwd_model, self.p1.log_density, 
-            x0, dt, t_max, n_steps, n_traj=16
-        )
-        eubo = metrics.compute_eubo(
-            self.fwd_model, self.bwd_model, self.p1.log_density, 
-            x0, dt, t_max, n_steps
-        )
+        if sb_iter == 0:
+            x0  = self.p0.sample(self.config.val_batch_size).to(self.config.device)
+            x1 = sutils.sample_trajectory(
+                self.reference_process, 
+                x0, dt, t_max, n_steps, self.config.alpha, self.config.var, 
+                direction="fwd",
+                only_last=True
+            )
+        else:
+            x1 = self.p1_buffer.sample(
+                self.config.val_batch_size
+            ).to(self.config.device)
 
-        logging_dict = {
-            "metrics/p1_elbo": elbo,
-            "metrics/p1_eubo": eubo,
-            "metrics/p1_iw_1": iw_1, 
-            "metrics/p1_iw_2": iw_2,
-            "sb_iter": sb_iter,
-        }
-        # log image from real latents
-        real_img = self.p1.reward.generator(x0[:num_img_to_log]).cpu()
-        img_dim = real_img.view(num_img_to_log, -1).shape[1]
-        image_shape = (num_img_to_log, ) + infer_shape(img_dim)
-        real_img_grid = make_grid(
-            real_img.view(*image_shape), nrow=6, normalize=True
+        trajectory, timesteps = sutils.sample_trajectory(
+            self.bwd_model, 
+            x1, dt, t_max, n_steps, self.config.alpha, self.config.var,
+            direction="bwd",
+            only_last=False,
+            return_timesteps=True
         )
 
-        # log image from generated latents
-        x1_pred = sutils.sample_trajectory(
-            self.fwd_model, x0, 'forward', dt, n_steps, t_max, only_last=True
-        )
-        
-        L2_between_x0_x1 = (x1_pred - x0).pow(2).sum(1).mean()
-        path_kl = metrics.compute_path_kl(self.fwd_model, x0, dt, t_max, n_steps)
-        
-        logging_dict = logging_dict | {
-            "metrics/L2^2(x0, x1)": L2_between_x0_x1,
-            "metrics/Path_KL": path_kl
-        }
-
-        output = self.p1.reward(x1_pred)
-        pred_img_grid = make_grid(
-            output["images"][:num_img_to_log].clip(0, 1).cpu().view(image_shape), 
-            nrow=6, normalize=True
+        figure = utils.plot_trajectory(
+            [tensor.cpu() for tensor in trajectory][::-1], timesteps[::-1], 
+            title=f"Backward Process, step={sb_iter}",
+            limits=(-3, 3),
         )
 
-        random_annotated_img = utils.plot_annotated_images(
-            output["images"][:num_img_to_log].clip(0, 1).cpu().view(image_shape), 
-            probas_classes=(
-                output["probas"][:num_img_to_log], 
-                output["classes"][:num_img_to_log]
-            ), 
-            n_col=6, 
-            figsize=(18, 18)
-        )
-
-        images, probas, classes = self.p1.reward.get_target_class_images(
-            output, num_img_to_log
-        )
-        images = complete_tensor(images, num_img_to_log)
-        probas = complete_tensor(probas, num_img_to_log)
-        classes = complete_tensor(classes, num_img_to_log)
-        
-        target_class_fig = utils.plot_annotated_images(
-            images.clip(0, 1).cpu().view(image_shape), (probas, classes),
-            n_col=6, figsize=(18, 18)
-        )
-
-        reward, precision = self.p1.reward.get_reward_and_precision(outputs=output)
-
-        logging_dict = logging_dict | {
-            "metrics/precision": precision,
-            "metrics/val_mean_log_reward": reward.log().mean(),
-        }
-
-        with torch.enable_grad():
-            x_buffer = self.p1_buffer.sample(self.p1_buffer.size)
-            x_buffer = x_buffer.to(self.config.device)
-        
-        buffer_output = self.p1.reward(x_buffer)
-        buffer_samples_fig = utils.plot_annotated_images(
-            buffer_output["images"][:num_img_to_log].clip(0, 1).cpu().view(image_shape),
-            probas_classes=(
-                buffer_output["probas"][:num_img_to_log], 
-                buffer_output["classes"][:num_img_to_log]
-            ), 
-            n_col=6, figsize=(18, 18)
-        )
-        
-        buffer_rwd, buffer_prc = self.p1.reward.get_reward_and_precision(
-            outputs=buffer_output
-        )
-
-        logging_dict = logging_dict | {
-            "metrics/buffer_precision": buffer_prc,
-            "metrics/buffer_reward": buffer_rwd,
-        }
-
-        if sb_iter % self.config.log_img_freq == 0:
-            logging_dict = logging_dict | {
-                "images/buffer_samples": wandb.Image(buffer_samples_fig),
-                "images/x1_sample_annotated": wandb.Image(random_annotated_img),
-                "images/x1_target_class": wandb.Image(target_class_fig),
-                "images/x0_sample": wandb.Image(real_img_grid),
-                "images/x1-sample": wandb.Image(pred_img_grid), 
-            }
-    
-        run.log(logging_dict)
+        run.log({
+            "images/backward_trajectory": wandb.Image(figure), 
+            "sb_iter": sb_iter
+        })
         plt.close("all")
-
-    @torch.no_grad()
-    def log_backward_step(self, sb_iter, run):
-        return None

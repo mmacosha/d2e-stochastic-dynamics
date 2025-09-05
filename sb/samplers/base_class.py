@@ -11,7 +11,7 @@ from omegaconf import OmegaConf
 from tqdm import trange
 
 import sb.utils as utils
-from sb.samplers.utils import ReferenceProcess2
+from sb.samplers.utils import ReferenceProcess
 
 
 @dataclass
@@ -39,14 +39,17 @@ class SBConfig:
     dt: float = 0.0006
     t_max: float = 0.012
     n_steps: int = 20
+    var: float = 2.0
 
     batch_size: int = 512
     val_batch_size: Optional[int] = None
+    metric_batch_size: Optional[int] = None
     save_checkpoint_freq: int = 100
     restore_from: int = -1
 
     def __post__init__(self):
         self.val_batch_size = self.val_batch_size or self.batch_size
+        self.metric_batch_size = self.metric_batch_size or self.batch_size
         assert self.dt * self.n_steps == self.t_max
 
         assert self.matching_method in {"mean", "score", "ll"}, \
@@ -113,7 +116,7 @@ class SB(ABC):
         self.p0 = p0
         self.p1 = p1
 
-        self.reference_process = ReferenceProcess2(
+        self.reference_process = ReferenceProcess(
             alpha=self.config.alpha,
             dt=self.config.dt,
             method=self.config.matching_method,
@@ -167,7 +170,7 @@ class SB(ABC):
             'backward_optim': self.bwd_optim.state_dict(), 
         }
         torch.save(checkpoint, checkpoint_path / f'checkpoint-{sb_iter}.pth')
-        wandb.save(checkpoint_path / f'checkpoint-{sb_iter}.pth')
+        wandb.save(f'checkpoint-{sb_iter}.pth')
 
     def resotre_from_last_checkpoint(self, run):
         checkpoint_path, sb_step = find_checkpoint(

@@ -1,0 +1,11 @@
+buffer_type: decoupled_langevin
+langevin_freq: 500
+buffer_size: 2048
+buffer_sampler: ula2
+init_step_size: 0.01
+anneal_value: 0.1
+num_langevin_steps: 50
+noise_start_ratio: 0.5
+beta_fn: 'lambda i: 1.0'
+log_hist: false
+log_langevin: false

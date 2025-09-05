@@ -1,17 +1,17 @@
 defaults:
   - _self_
   - /data@data.p_0: d2normal
-  - /data@data.p_1: 8gaussians
+  - /data@data.p_1: gmm
   - /models@models.fwd: d64-tv
   - /models@models.bwd: d64-tv
-  - sampler: d2d_2d
-  - buffer: simple
+  - sampler: d2d-langevin
+  - buffer: decoupled_langevin_2d
 
 exp:
   id: null
   resume: allow
   name: d2d-sb-ablations
-  project: sb-ablations
+  project: sb-d2e-ablations
   mode: online
 
 hydra:

@@ -82,6 +82,9 @@ def sf2m_loss(fwd_model, x0, x1, var):
     drift_loss = (target_drift - output.drift).pow(2).sum(1)
     score_loss = (lmbda * output.log_var + z).pow(2).sum(1)
 
+    # score = (t*x1 + (1 - t) * x0 - xt) / (sigma^2 * t * (1 - t))
+    # score =  - sigma * sqrt((1 - t)*t)/ (sigma^2 * t * (1 - t))
+
     return (drift_loss + score_loss).mean()
 
 

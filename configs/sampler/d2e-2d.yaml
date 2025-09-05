@@ -1,0 +1,36 @@
+name: d2e_2d
+device: mps
+
+# logging
+save_checkpoint_freq: 5
+log_fwd_freq: 1
+log_bwd_freq: 1
+
+# training
+batch_size: 128
+val_batch_size: 512
+metric_batch_size: 10000
+
+matching_method: ll
+backward_first: true
+num_sb_steps: 20
+num_fwd_steps: 4000
+num_bwd_steps: 4000
+fwd_optim_lr: 5e-4
+bwd_optim_lr: 5e-4
+fwd_ema_decay: 0.0
+bwd_ema_decay: 0.0
+anneal_beta_fn: 'lambda it, n: 1.0'
+
+# ref process
+dt: 0.01
+alpha: 0.0
+n_steps: 20
+t_max: ${mul:${sampler.dt}, ${sampler.n_steps}}
+var: 2.0
+
+# policy
+n_trajectories: 2
+start_mixed_from: 0
+off_policy_fraction: 0.5
+reuse_bwd_trajectory: false

@@ -4,17 +4,17 @@ from torch import nn
 from torchvision.transforms import v2
 
 from transformers import ViTForImageClassification, ViTImageProcessor
-from efficientvit.ae_model_zoo import DCAE_HF
+# from efficientvit.ae_model_zoo import DCAE_HF
 
 import sys, os
-sys.path.append("./external/sg3")
-sys.path.append("./external/cifar10_cls")
-sys.path.append(os.path.abspath("./external/sngan"))
+# sys.path.append("./external/sg3")
+# sys.path.append("./external/cifar10_cls")
+# sys.path.append(os.path.abspath("./external/sngan"))
 
-import dnnlib, legacy
-import cifar10_models.vgg as vgg
-import cifar10_models.resnet as resnet
-import external.sngan.models.sngan_cifar10 as sngan_model
+# import dnnlib, legacy
+# import cifar10_models.vgg as vgg
+# import cifar10_models.resnet as resnet
+# import external.sngan.models.sngan_cifar10 as sngan_model
 
 from .utils import rgb_to_3ch_grey, AttrDict
 

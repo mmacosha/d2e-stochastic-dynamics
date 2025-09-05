@@ -13,7 +13,7 @@ from sb.data import datasets
 from sb.nn import SimpleNet, DSFixedBackward
 from sb.samplers import (
     SBConfig, D2ESBConfig,
-    D2DSB, D2ESB, D2ESB_2D, DiffusionSampler
+    D2DSB, D2ESB_2D, D2ESB_IMG, D2DSBLangevin
 )
 
 
@@ -65,12 +65,12 @@ def seed_everything(seed: int = 42):
 @click.option("--name",         "name",      type=click.STRING, default=None)
 @click.option("--run_id",       "run_id",    type=click.STRING, default=None)
 @click.option("--wandb",        "wandb",     type=click.STRING, default='online')
-@click.option("--device",       "device",    type=click.INT, default=0)
+@click.option("--device",       "device",    type=click.STRING, default=0)
 @click.option("--seed",         "seed",      type=click.INT, default=42 )
 @click.option("--debug",        "debug",     type=click.BOOL, default=False, is_flag=True)
 @click.option("--overrides",    "overrides", type=click.STRING, default=None,)
-def run(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str, 
-        device: int, seed: int, debug: bool, overrides=None):
+def main(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str, 
+         device: int, seed: int, debug: bool, overrides=None):
     seed_everything(seed)
     with initialize(version_base=None, config_path=cfg_path):
         overrides = read_overrides(overrides)
@@ -96,7 +96,7 @@ def run(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str,
             config.exp.mode = wandb
             config.exp.name = f"{name if name else config.exp.name}-{seed=}"
         
-        config.sampler.device = f"cuda:{device}"
+        config.sampler.device = device if device == 'mps' else f"cuda:{device}"
 
     if config.sampler.matching_method not in  {'ll', 'sf2m'} and \
        (config.models.fwd.predict_log_var or config.models.bwd.predict_log_var):
@@ -120,32 +120,32 @@ def run(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str,
                 p0=p0, p1=p1,
                 config=sb_config,
             )
-        case 'd2d_2d':
-            sb_config = SBConfig(**config.sampler)
-            sb_trainer = D2ESB_2D(
-                fwd_model=fwd_model,
-                bwd_model=bwd_model,
-                p0=p0, p1=p1,
-                config=sb_config,
-            )
-
-        case 'd2e':
+        case 'd2e_2d':
             sb_config = D2ESBConfig(**config.sampler)
-            sb_trainer = D2ESB(
+            sb_trainer = D2ESB_2D(
                 fwd_model=fwd_model,
                 bwd_model=bwd_model,
                 p0=p0, p1=p1,
                 config=sb_config,
                 buffer_config=config.buffer
             )
-        
-        case "ds":
-            bwd_model = DSFixedBackward(**config.models.bwd).to(config.sampler.device)
-            sb_trainer = DiffusionSampler(
+
+        case 'd2e':
+            sb_config = D2ESBConfig(**config.sampler)
+            sb_trainer = D2ESB_IMG(
                 fwd_model=fwd_model,
                 bwd_model=bwd_model,
                 p0=p0, p1=p1,
-                config=config.sampler,
+                config=sb_config,
+                buffer_config=config.buffer
+            )
+        case 'd2d_langevin':
+            sb_config = SBConfig(**config.sampler)
+            sb_trainer = D2DSBLangevin(
+                fwd_model=fwd_model,
+                bwd_model=bwd_model,
+                p0=p0, p1=p1,
+                config=sb_config,
                 buffer_config=config.buffer
             )
         case _: 
@@ -155,4 +155,4 @@ def run(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str,
 
 
 if __name__ == "__main__":
-    run()
+    main()

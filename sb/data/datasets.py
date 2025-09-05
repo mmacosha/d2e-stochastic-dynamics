@@ -1,4 +1,5 @@
 import math
+import numpy as np
 
 import torch
 from torch import distributions 
@@ -47,7 +48,7 @@ class SCurve(base.Dataset):
 
     def sample(self, size: int):
         def _iterator():
-            yield self.fn(size, self.shift, self.noise)
+            yield self.fn(size, self.noise, self.shift)
         return next(_iterator())
 
 
@@ -107,17 +108,14 @@ class GMM(base.Dataset):
         )
         self.gmm = distributions.MixtureSameFamily(mix, comp)
 
-        # self.grad_fn = torch.func.grad(lambda y: self.gmm.log_prob(y).sum())
-        self.reward = lambda x: torch.as_tensor(1.0)
-
     def sample(self, size):
         return self.gmm.sample((size, ))
     
-    def log_density(self, x):
+    def log_density(self, x, *args, **kwargs):
         return self.gmm.log_prob(x)
-    
-    # def grad_log_density(self, x):
-    #     return self.grad_fn(x)
+
+    def get_mean_log_reward(self, x):
+        return self.log_density(x).mean()
 
 
 @registry.add(name="simple_gaussian")
@@ -136,6 +134,9 @@ class SimpleGaussian(base.Dataset):
         log_density = self.dist.log_prob(x)
         log_density = log_density.view(log_density.size(0), -1).sum(dim=1)
         return log_density
+
+    def get_mean_log_reward(self, x):
+        return self.log_density(x).mean()
 
 
 def rejection_sampling(
@@ -159,6 +160,7 @@ def rejection_sampling(
         samples = torch.concat([samples, new_samples], dim=0)
         return samples
 
+
 @registry.add(name="manywell")
 class ManyWell(base.Dataset):
     """
@@ -168,7 +170,7 @@ class ManyWell(base.Dataset):
         super().__init__()
         self.device = device
 
-        self.data = torch.ones(dim, dtype=float).to(self.device)
+        self.data = torch.ones(dim, dtype=torch.float32).to(self.device)
         self.data_ndim = dim
 
         assert dim % 2 == 0
@@ -230,6 +232,9 @@ class ManyWell(base.Dataset):
     def sample(self, batch_size):
         return torch.cat([self.sample_doublewell(batch_size) for _ in range(self.n_wells)], dim=-1)
 
+    def get_mean_log_reward(self, x):
+        return self.log_density(x).mean()
+
 
 @registry.add(name="funnel")
 class Funnel(base.Dataset):
@@ -248,6 +253,10 @@ class Funnel(base.Dataset):
                                torch.sum(x.pow(2) / v.exp(), 1) + \
                                math.log(2 * math.pi * 3) + \
                                v.pow(2).sum(1) / 9 )
+        return log_density
+
+    def get_mean_log_reward(self, x):
+        return self.log_density(x).mean()
 
 
 @registry.add(name="cls_reward_dist")
@@ -265,3 +274,6 @@ class ClsRewardDist(base.Dataset):
 
     def log_density(self, x, anneal_beta=1.0):
         return self.prior.log_density(x) + self.reward.log_reward(x, beta=anneal_beta)
+
+    def get_mean_log_reward(self, x):
+        return self.reward.log_reward(x).mean()

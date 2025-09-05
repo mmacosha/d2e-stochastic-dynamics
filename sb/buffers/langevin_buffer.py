@@ -75,7 +75,6 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
             p1, 
             init_step_size: float, 
             num_langevin_steps: int,
-            ema_lambda: float = 0,
             sampler: str = 'ula',
             noise_start_ration: float = 0.0,
             anneal_value: float = 1.0,
@@ -83,12 +82,14 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
             device = 'cpu',
             beta_fn: Callable = None,
             log_hist: bool = False,
+            log_langevin: bool = False,
             *args, **kwargs
         ):
         super().__init__(buffer_size)
         self.log_hist = log_hist
         self.device = device
-        self.lmbda = ema_lambda
+        self.lmbda = 0 #ema_lambda
+        self.log_langevin = log_langevin
         self.beta_fn = eval(beta_fn) if beta_fn else None
 
         self.anneal_value = anneal_value
@@ -100,7 +101,7 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
         self.step_size = init_step_size
         
         self.log_density = p1.log_density
-        self.reward = p1.reward
+        # self.reward = p1.reward
 
         self.langevin_step_counter = 0
 
@@ -151,7 +152,7 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
             
             dt *= anneal_alpha
             
-            if wandb.run is not None:
+            if wandb.run is not None and self.log_langevin:
                 with torch.no_grad():
                     outputs = self.reward(x)
                     rwd, prc = self.reward.get_reward_and_precision(outputs=outputs)
@@ -215,6 +216,6 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
                 x[-noise_size:] = torch.randn(noise_size, *x.shape[1:], device=x.device)
             
             x = self.run_sampler(x)
-            x = self.resample_propto_reward(x)
+            # x = self.resample_propto_reward(x)
                 
         return x
