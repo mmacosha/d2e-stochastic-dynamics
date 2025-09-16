@@ -1,0 +1,5 @@
+name: cross
+args: 
+  r: 1
+  noise: 0.1
+  device: ${sampler.device}

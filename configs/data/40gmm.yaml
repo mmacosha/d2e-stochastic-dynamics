@@ -1,0 +1,4 @@
+name: 40gmm
+args: 
+  dim: 2
+  device: ${sampler.device}

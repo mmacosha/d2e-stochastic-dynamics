@@ -1,0 +1,4 @@
+name: manywell
+args: 
+  dim: 2
+  device: ${sampler.device}

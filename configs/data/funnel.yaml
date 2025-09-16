@@ -1,0 +1,4 @@
+name: funnel
+args: 
+  dim: 2
+  device: ${sampler.device}
