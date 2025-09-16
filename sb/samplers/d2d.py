@@ -92,11 +92,12 @@ class D2DSB(base_class.SB):
         figure = utils.plot_trajectory(
             [tensor.cpu() for tensor in trajectory], timesteps, 
             title=f"Forward Process, step={sb_iter}",
-            limits=(-3, 3)
+            limits=tuple(self.config.plot_limits),
         )
-        x1_true = self.p1.sample(self.config.val_batch_size).float().to(self.config.device)
-        x1_pred = trajectory[-1]
-        w2 = metrics.compute_w2_distance(x1_true,  x1_pred)
+
+        x1_true = self.p1.sample(self.config.val_batch_size)
+        x1_true = x1_true.float().to(self.config.device)
+        w2 = metrics.compute_w2_distance(x1_true,  trajectory[-1])
         path_kl = metrics.compute_path_kl(
             self.fwd_model, 
             x0, dt, t_max, n_steps, self.config.alpha, self.config.var, 
@@ -118,17 +119,19 @@ class D2DSB(base_class.SB):
 
         x1 = self.p1.sample(self.config.val_batch_size).float().to(self.config.device)
         trajectory, timesteps = sutils.sample_trajectory(
-            self.fwd_model, 
+            self.bwd_model, 
             x1, dt, t_max, n_steps, self.config.alpha, self.config.var, 
             direction="bwd",
             return_timesteps=True, 
             method=self.config.matching_method
         )
+
         figure = utils.plot_trajectory(
             [tensor.cpu() for tensor in trajectory][::-1], timesteps[::-1], 
             title=f"Backward Process, step={sb_iter}",
-            limits=(-3, 3)
+            limits=tuple(self.config.plot_limits)
         )
+
         run.log({
             "images/backward_trajectory": wandb.Image(figure), 
             "sb_iter": sb_iter
@@ -141,7 +144,7 @@ class D2DSB(base_class.SB):
         t_max = self.config.t_max
         n_steps = self.config.n_steps
 
-        x0 = self.p0.sample(self.config.val_batch_size).to(self.config.device)
+        x0 = self.p0.sample(self.config.val_batch_size).float().to(self.config.device)
         x1_pred = sutils.sample_trajectory(
             self.fwd_model, 
             x0, dt, t_max, n_steps, self.config.alpha, self.config.var, 
@@ -150,7 +153,9 @@ class D2DSB(base_class.SB):
             return_timesteps=False, 
             method=self.config.matching_method
         )
-        x1_true = self.p1.sample(self.config.val_batch_size).to(self.config.device)
+        x1_true = self.p1.sample(
+            self.config.val_batch_size
+        ).float().to(self.config.device)
         w2 = metrics.compute_w2_distance(
             x1_true,  x1_pred.to(self.config.device)
         )

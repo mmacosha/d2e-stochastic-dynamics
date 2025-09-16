@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Ensure we're launching from the project root
+cd "$(dirname "$0")/../.."
+
 # train var
 # train --seed=42 --device=mps --cfg=d2d-ablate --name=sb-data2data-fixed_var-n_steps_=5 --wandb=online \
 #    --overrides='models@models.fwd=d64-ntv,models@models.bwd=d64-ntv,sampler.matching_method=ll,sampler.dt=0.04,sampler.n_steps=5'

@@ -42,7 +42,6 @@ def complete_tensor(x, size):
 class D2ESBConfig(base_class.SBConfig):
     logging_data: str = "images"
     drift_reg_coeff: float = 0.0
-    reuse_backward_trajectory: bool = True
     n_trajectories: int = 2
     num_img_to_log: int = 36
     off_policy_fraction: float = 0.25
@@ -169,7 +168,7 @@ class D2ESB(base_class.SB):
                         only_last=True
                     )
 
-            elif self.config.off_policy_fraction > 0: # and sb_iter > 0:
+            elif self.config.off_policy_fraction > 0 and sb_iter > 0:
                 num_off_policy_samples = int(
                     self.config.off_policy_fraction * (_batch_size)
                 )
@@ -218,7 +217,7 @@ class D2ESB(base_class.SB):
             else:
                 density_fn = functools.partial(self.p1.log_density, anneal_beta=beta)
                 
-                if self.config.reuse_bwd_trajectory:
+                if self.config.reuse_bwd_trajectory and sb_iter > 0:
                     x0_off, x0_on = x0
                     x0_off = x0_off.repeat(n_trajectories - 1, 1) 
                     x0_on = x0_on.repeat(n_trajectories, 1) 
@@ -314,7 +313,7 @@ class D2ESB(base_class.SB):
         figure = utils.plot_trajectory(
             [tensor.cpu() for tensor in trajectory][::-1], timesteps[::-1], 
             title=f"Backward Process, step={sb_iter}",
-            limits=(-3, 3),
+            limits=tuple(self.config.plot_limits),
         )
 
         run.log({

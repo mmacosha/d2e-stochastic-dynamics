@@ -106,7 +106,8 @@ class D2ESB_IMG(d2e.D2ESB):
         
         target_class_fig = utils.plot_annotated_images(
             images.clip(0, 1).cpu().view(image_shape), (probas, classes),
-            n_col=6, figsize=(18, 18)
+            n_col=6, 
+            figsize=(18, 18)
         )
 
         reward, precision = self.p1.reward.get_reward_and_precision(outputs=output)
@@ -127,7 +128,8 @@ class D2ESB_IMG(d2e.D2ESB):
                 buffer_output["probas"][:num_img_to_log], 
                 buffer_output["classes"][:num_img_to_log]
             ), 
-            n_col=6, figsize=(18, 18)
+            n_col=6, 
+            figsize=(18, 18)
         )
         
         buffer_rwd, buffer_prc = self.p1.reward.get_reward_and_precision(

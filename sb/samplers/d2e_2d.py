@@ -24,7 +24,7 @@ class D2ESB_2D(d2e.D2ESB):
             self.fwd_model, self.bwd_model, 
             self.p1.log_density, 
             x0, dt, t_max, n_steps, 
-            n_traj=16
+            n_traj=4
         )
         eubo = metrics.compute_eubo(
             self.fwd_model, self.bwd_model, 
@@ -75,7 +75,7 @@ class D2ESB_2D(d2e.D2ESB):
         fwd_trajectory_fig = utils.plot_trajectory(
             [tensor.cpu() for tensor in trajectory], timesteps, 
             title=f"Forward Process, step={sb_iter}",
-            limits=(-3, 3)
+            limits=tuple(self.config.plot_limits)
         )
         logging_dict = logging_dict | {
             "images/forward_trajectory": wandb.Image(fwd_trajectory_fig)

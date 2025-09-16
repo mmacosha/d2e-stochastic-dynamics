@@ -10,11 +10,8 @@ from hydra import initialize, compose
 from omegaconf import OmegaConf
 
 from sb.data import datasets
-from sb.nn import SimpleNet, DSFixedBackward
-from sb.samplers import (
-    SBConfig, D2ESBConfig,
-    D2DSB, D2ESB_2D, D2ESB_IMG, D2DSBLangevin
-)
+from sb import nn as sbnn
+from sb import samplers as sb_samplers
 
 
 def read_overrides(overrides):
@@ -55,9 +52,6 @@ def seed_everything(seed: int = 42):
 
     print(f"Seed set to {seed} (deterministic mode ON)")
 
-# Example usage:
-# seed_everything(123)
-
 
 @click.command()
 @click.option('--cfg_path',     "cfg_path",  type=click.Path(exists=True), default='configs')
@@ -96,7 +90,7 @@ def main(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str,
             config.exp.mode = wandb
             config.exp.name = f"{name if name else config.exp.name}-{seed=}"
         
-        config.sampler.device = device if device == 'mps' else f"cuda:{device}"
+        config.sampler.device = device if device in {'mps', 'cpu'} else f"cuda:{device}"
 
     if config.sampler.matching_method not in  {'ll', 'sf2m'} and \
        (config.models.fwd.predict_log_var or config.models.bwd.predict_log_var):
@@ -104,25 +98,26 @@ def main(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str,
             f"Matching method {config.sampler.matching_method} " \
             "do not support tainable variance."
         )
-    
+
     p0 = datasets[config.data.p_0.name](**config.data.p_0.args)
     p1 = datasets[config.data.p_1.name](**config.data.p_1.args)
-
-    fwd_model = SimpleNet(**config.models.fwd).to(config.sampler.device)
-    bwd_model = SimpleNet(**config.models.bwd).to(config.sampler.device)
+    
+    fwd_model = sbnn.SimpleNet(**config.models.fwd).to(config.sampler.device)
+    bwd_model = sbnn.SimpleNet(**config.models.bwd).to(config.sampler.device)
 
     match config.sampler.name:
         case'd2d':
-            sb_config = SBConfig(**config.sampler)
-            sb_trainer = D2DSB(
+            sb_config = sb_samplers.SBConfig(**config.sampler)
+            sb_trainer = sb_samplers.D2DSB(
                 fwd_model=fwd_model,
                 bwd_model=bwd_model,
                 p0=p0, p1=p1,
                 config=sb_config,
             )
+
         case 'd2e_2d':
-            sb_config = D2ESBConfig(**config.sampler)
-            sb_trainer = D2ESB_2D(
+            sb_config = sb_samplers.D2ESBConfig(**config.sampler)
+            sb_trainer = sb_samplers.D2ESB_2D(
                 fwd_model=fwd_model,
                 bwd_model=bwd_model,
                 p0=p0, p1=p1,
@@ -131,23 +126,45 @@ def main(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str,
             )
 
         case 'd2e':
-            sb_config = D2ESBConfig(**config.sampler)
-            sb_trainer = D2ESB_IMG(
+            sb_config = sb_samplers.D2ESBConfig(**config.sampler)
+            sb_trainer = sb_samplers.D2ESB_IMG(
                 fwd_model=fwd_model,
                 bwd_model=bwd_model,
                 p0=p0, p1=p1,
                 config=sb_config,
                 buffer_config=config.buffer
             )
+
         case 'd2d_langevin':
-            sb_config = SBConfig(**config.sampler)
-            sb_trainer = D2DSBLangevin(
+            sb_config = sb_samplers.SBConfig(**config.sampler)
+            sb_trainer = sb_samplers.D2DSBLangevin(
                 fwd_model=fwd_model,
                 bwd_model=bwd_model,
                 p0=p0, p1=p1,
                 config=sb_config,
                 buffer_config=config.buffer
             )
+
+        case 'e2e':
+            sb_config = sb_samplers.D2ESBConfig(**config.sampler)
+            sb_trainer = sb_samplers.E2ESB(
+                fwd_model=fwd_model,
+                bwd_model=bwd_model,
+                p0=p0, p1=p1,
+                config=sb_config,
+                buffer_config=config.buffer
+            )
+
+        case 'ds':
+            sb_config = sb_samplers.D2ESBConfig(**config.sampler)
+            sb_trainer = sb_samplers.DiffusionSampler2D(
+                fwd_model=fwd_model,
+                bwd_model=bwd_model,
+                p0=p0, p1=p1,
+                config=sb_config,
+                buffer_config=config.buffer
+            )
+
         case _: 
             raise NotImplementedError('this trainer is not available')
     

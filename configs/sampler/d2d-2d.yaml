@@ -5,6 +5,7 @@ device: mps
 save_checkpoint_freq: 5
 log_fwd_freq: 1
 log_bwd_freq: 1
+plot_limits: [-3, 3]
 
 # training
 batch_size: 128

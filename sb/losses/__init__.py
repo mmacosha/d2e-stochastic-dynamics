@@ -9,4 +9,5 @@ from .d2e_losses import (
     compute_bwd_vargrad_loss,
     compute_fwd_tb_log_difference,
     compute_fwd_tb_log_difference_reuse_traj,
+    compute_relative_tb_loss,
 )

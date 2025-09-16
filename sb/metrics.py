@@ -112,7 +112,7 @@ def compute_path_kl(
             torch.log(ref_var / fwd_var) + \
             (fwd_var + (fwd_mean - ref_mean).pow(2)) / ref_var - 1.0,
             dim=1
-        ) 
+        )
         path_kl += one_step_kl.mean()
 
     return path_kl.mean()

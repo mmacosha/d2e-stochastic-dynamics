@@ -31,6 +31,8 @@ class SBConfig:
     bwd_ema_decay: float = 0.999
     fwd_optim_lr: int = 1e-3
     bwd_optim_lr: int = 1e-3
+    
+    plot_limits: tuple = (-3, 3)
     log_fwd_freq: int = 1
     log_bwd_freq: int = 1
     log_img_freq: int = 10

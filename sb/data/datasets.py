@@ -118,6 +118,32 @@ class GMM(base.Dataset):
         return self.log_density(x).mean()
 
 
+@registry.add(name="cross")
+class Cross(base.Dataset):
+    def __init__(self, r: int = 1, noise=0.01, device: str = 'cpu'):
+        means = torch.tensor([
+                [0, 0], [0.6, 0.36], [-0.6, 0.36], [-0.6, -0.36], [0.6, -0.36],
+            ], device=device) * r
+        stds = torch.ones_like(means) * noise
+        mode_probs = torch.ones(means.size(0), device=device) / means.size(0)
+        
+        mix = distributions.Categorical(mode_probs)
+        comp = distributions.Independent(
+            base_distribution=distributions.Normal(means, stds),
+            reinterpreted_batch_ndims=1
+        )
+        self.gmm = distributions.MixtureSameFamily(mix, comp)
+
+    def sample(self, size):
+        return self.gmm.sample((size, ))
+    
+    def log_density(self, x, *args, **kwargs):
+        return self.gmm.log_prob(x)
+
+    def get_mean_log_reward(self, x):
+        return self.log_density(x).mean()
+
+
 @registry.add(name="simple_gaussian")
 class SimpleGaussian(base.Dataset):
     def __init__(self, mean=0, std=1, dim=2, device='cpu'):
@@ -244,11 +270,12 @@ class Funnel(base.Dataset):
 
     def sample(self, size: int):
         v = torch.randn(size, 1, device=self.device) * 3
-        x = torch.randn(size, self.dim, device=self.device) * torch.exp(v / 2)
-        return torch.stack([x, v], dim=1)
+        x = torch.randn(size, self.dim - 1, device=self.device) * torch.exp(v / 2)
+        return torch.cat([x, v], dim=1)
 
-    def log_density(self, tensor):
-        x, v = tensor[:, :-1], tensor[:, -1:]
+    def log_density(self, x, anneal_beta=1.0):
+        x, v = x[:, :-1], x[:, -1:]
+        print(x.shape, v.shape)
         log_density = - 0.5 * (self.dim * (math.log(2 * math.pi) + v) + \
                                torch.sum(x.pow(2) / v.exp(), 1) + \
                                math.log(2 * math.pi * 3) + \
@@ -277,3 +304,29 @@ class ClsRewardDist(base.Dataset):
 
     def get_mean_log_reward(self, x):
         return self.reward.log_reward(x).mean()
+
+
+@registry.add(name="40gmm")
+class FortyGaussianMixture:
+    def __init__(self, dim, device):
+        loc = (torch.rand((40, dim)) - 0.5) * 2 * 40
+        scale = torch.ones_like(loc).to(device)
+        
+        mixture_weights = torch.ones(loc.shape[0], device=loc.device)
+        modes = distributions.Independent(distributions.Normal(loc, scale), 1)
+        mix = distributions.Categorical(mixture_weights)
+        
+        self.nmode = 40
+        self.means = loc
+        self.covariance_matrices = [torch.diag(scale[i]) for i in range(self.nmode)]
+        self.gmm = distributions.MixtureSameFamily(mix, modes)
+        self.gmm_weights = mix.probs.numpy()
+
+    def log_density(self, x, anneal_beta=1.0):
+        return self.gmm.log_prob(x)
+
+    def sample(self, size: int):
+        return self.gmm.sample((size,))
+
+    def get_mean_log_reward(self, x):
+        return self.log_density(x).mean()

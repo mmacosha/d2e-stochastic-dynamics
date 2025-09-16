@@ -1,0 +1,23 @@
+defaults:
+  - _self_
+  - /data@data.p_0: d2normal
+  - /data@data.p_1: gmm
+  - /models@models.fwd: d64-tv
+  - /models@models.bwd: d64-tv
+  - sampler: ds-2d
+  - buffer: simple
+
+exp:
+  id: null
+  resume: allow
+  name: ds-ablations
+  project: ds-ablations
+  mode: online
+
+hydra:
+  run:
+    dir: "."
+  output_subdir: null
+  job_logging:
+    disable_existing_loggers: true
+  verbose: false

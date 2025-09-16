@@ -1,6 +1,6 @@
 buffer_type: decoupled_langevin
 langevin_freq: 500
-buffer_size: 2048
+buffer_size: 10000
 buffer_sampler: ula2
 init_step_size: 0.01
 anneal_value: 0.1

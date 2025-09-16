@@ -141,6 +141,39 @@ def compute_fwd_tb_log_difference_reuse_traj(
     return log_diff, xt
 
 
+def compute_relative_tb_loss(
+    fwd_model, log_p1, x, dt, t_max, num_t_steps, alpha, var, 
+):
+    xt = x
+    log_p_fwd, log_p_ref = 0, 0
+    
+    for t_step in torch.linspace(0, t_max - dt, num_t_steps):
+        t = torch.ones(x.size(0), device=x.device) * t_step
+        fwd_mean, fwd_log_var = utils.get_mean_log_var(fwd_model, xt, t, dt)
+        ref_mean, ref_log_var = xt - alpha * t[:, None] * dt, torch.as_tensor(var * dt).log()
+        ref_log_var = ref_log_var * torch.ones_like(xt)
+        
+        with torch.no_grad():
+            xt = fwd_mean + fwd_log_var.exp().sqrt() * torch.randn_like(fwd_mean)
+        
+        log_p_fwd += log_p_fwd + utils.log_normal_density(xt, fwd_mean, fwd_log_var)
+        log_p_ref += log_p_ref + utils.log_normal_density(xt, ref_mean, ref_log_var)
+
+    if alpha > 0:
+        var_div_2alpha = var / (2 * alpha)
+        var_p1_ref = torch.as_tensor(
+            var_div_2alpha + (- 2 * alpha * t_max).exp() * (1 - var_div_2alpha)
+        )
+    else:
+        var_p1_ref = torch.as_tensor(1 + var * t_max)
+
+    var_p1_ref = var_p1_ref * torch.ones_like(xt)
+    log_p1_ref = - 0.5 * (var_p1_ref.log() - (xt).pow(2) / var_p1_ref).sum(-1)
+    log_diff = (log_p_fwd - log_p_ref) + (log_p1_ref - log_p1(xt))
+
+    return log_diff.pow(2).mean()
+
+
 # -------------------------------- Optimised LD loss --------------------------------- #
 
 
