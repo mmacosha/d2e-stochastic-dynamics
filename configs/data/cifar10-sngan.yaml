@@ -1,0 +1,9 @@
+  name: cls_reward_dist
+  args: 
+    reward_dir: /workspace/writeable/
+    generator_type: cifar10-sngan
+    classifier_type: cifar10-vgg13
+    prior_dim: 128
+    target_classes: [5]
+    reward_type: sum
+    device: ${sampler.device}

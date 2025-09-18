@@ -40,7 +40,6 @@ def complete_tensor(x, size):
 
 @dataclass
 class D2ESBConfig(base_class.SBConfig):
-    logging_data: str = "images"
     drift_reg_coeff: float = 0.0
     n_trajectories: int = 2
     num_img_to_log: int = 36
@@ -52,9 +51,6 @@ class D2ESBConfig(base_class.SBConfig):
 
     def __post__init__(self):
         super().__post__init__()
-        assert self.logging_data in {"images", "2d"}, \
-            f"Unknown logging data: {self.logging_data}. " \
-            "Available options: images, 2d."
         assert self.matching_method == 'll', \
             "D2E training does not support other matching methods"
         assert self.start_mixed_from >= 0
@@ -150,14 +146,14 @@ class D2ESB(base_class.SB):
                 beta = self.anneal_beta_fn(step_iter, self.config.num_fwd_steps)
 
             # compute off-policy x0
-            reuse_trajectory_loss = None
+            bwd_traj_log_diff = None
             if self.config.off_policy_fraction == 1.0:
                 x1 = self.p1_buffer.sample(_batch_size, hdim).to(device)
                 if self.config.reuse_bwd_trajectory:
                     density_fn = functools.partial(
                         self.p1.log_density, anneal_beta=beta
                     )
-                    reuse_trajectory_loss, x0 = \
+                    bwd_traj_log_diff, x0 = \
                         losses.compute_fwd_tb_log_difference_reuse_traj(
                             self.fwd_model, self.bwd_model, density_fn, 
                             x1, dt, t_max, n_steps,
@@ -178,10 +174,10 @@ class D2ESB(base_class.SB):
                     density_fn = functools.partial(
                         self.p1.log_density, anneal_beta=beta
                     )
-                    reuse_trajectory_loss, x0_off = \
+                    bwd_traj_log_diff, x0_off = \
                         losses.compute_fwd_tb_log_difference_reuse_traj(
-                            self.fwd_model, self.bwd_model, density_fn, 
-                            x1, dt, t_max, n_steps,
+                            self.fwd_model, self.bwd_model, 
+                            density_fn, x1, dt, t_max, n_steps,
                         )
                 else:
                     x0_off = sutils.sample_trajectory(
@@ -216,47 +212,44 @@ class D2ESB(base_class.SB):
             
             else:
                 density_fn = functools.partial(self.p1.log_density, anneal_beta=beta)
-                
+
                 if self.config.reuse_bwd_trajectory and sb_iter > 0:
                     x0_off, x0_on = x0
                     x0_off = x0_off.repeat(n_trajectories - 1, 1) 
                     x0_on = x0_on.repeat(n_trajectories, 1) 
                     x0 = torch.cat([x0_on, x0_off], dim=0)
-                    
-                    log = losses.compute_fwd_vargrad_loss(
-                        self.fwd_model, self.bwd_model, density_fn, 
-                        x0, dt, t_max, n_steps, 
+
+                    log = losses.compute_fwd_tb_log_difference(
+                        self.fwd_model, self.bwd_model, 
+                        density_fn, x0, dt, t_max, n_steps, 
                         p1_buffer=self.p1_buffer, 
-                        n_trajectories=n_trajectories,
-                        compute_var=False,
                     )
                     log_on  = log[ :x0_on.size(0)]
                     log_off = log[x0_on.size(0): ]
 
                     log_off = torch.cat([
                         log_off.reshape(n_trajectories - 1, -1), 
-                        reuse_trajectory_loss.unsqueeze(0)
+                        bwd_traj_log_diff.unsqueeze(0)
                     ], dim=0)
-                    
+
                     log = torch.cat(
                         [log_on.reshape(n_trajectories, -1),  log_off], 
                         dim=1
                     )
-                    
+
                     loss = (log  - log.mean(0, keepdim=True).detach()).pow(2).mean()
-                
+
                 else:
                     if isinstance(x0, tuple):
                         x0 = torch.cat(x0, dim=0).repeat(n_trajectories, 1) 
-                    
+
                     loss = losses.compute_fwd_vargrad_loss(
                         self.fwd_model, self.bwd_model, 
-                        density_fn, 
-                        x0, dt, t_max, n_steps, 
+                        density_fn, x0, dt, t_max, n_steps, 
                         p1_buffer=self.p1_buffer, 
                         n_trajectories=n_trajectories
                     )
-            
+
             with torch.no_grad():
                 x0 = self.p0.sample(self.config.val_batch_size).to(device)
                 

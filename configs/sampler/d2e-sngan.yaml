@@ -1,4 +1,4 @@
-name: d2e
+name: d2e_img
 device: cuda:0
 
 # logging
@@ -8,11 +8,14 @@ log_bwd_freq: 1
 
 # training
 batch_size: 256
+val_batch_size: 512
+metric_batch_size: 512
+
 matching_method: ll
 backward_first: true
 num_sb_steps: 500
-fwd_optim_lr: 5e-4
-bwd_optim_lr: 5e-4
+fwd_optim_lr: 2e-4
+bwd_optim_lr: 2e-4
 anneal_beta_fn: 'lambda it, n: 1.2 * math.exp(-it * 10 / n) + 0.1'
 num_fwd_steps: 500
 num_bwd_steps: 100
@@ -20,9 +23,10 @@ fwd_ema_decay: 0.0
 bwd_ema_decay: 0.0
 
 # ref process
-dt: 0.005
+dt: 0.00075
 alpha: 0.0
 n_steps: 20
+var: 2.0
 t_max: ${mul:${sampler.dt}, ${sampler.n_steps}}
 
 # policy

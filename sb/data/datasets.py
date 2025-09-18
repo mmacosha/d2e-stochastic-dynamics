@@ -107,6 +107,7 @@ class GMM(base.Dataset):
             reinterpreted_batch_ndims=1
         )
         self.gmm = distributions.MixtureSameFamily(mix, comp)
+        self.reward = None
 
     def sample(self, size):
         return self.gmm.sample((size, ))
@@ -133,6 +134,7 @@ class Cross(base.Dataset):
             reinterpreted_batch_ndims=1
         )
         self.gmm = distributions.MixtureSameFamily(mix, comp)
+        self.reward = None
 
     def sample(self, size):
         return self.gmm.sample((size, ))
@@ -151,6 +153,7 @@ class SimpleGaussian(base.Dataset):
         self.mean = torch.as_tensor(mean, device=device)
         self.sigma = torch.as_tensor(std, device=device)
         self.dist = distributions.Normal(self.mean, self.sigma)
+        self.reward = None
 
     def sample(self, size: int):
         shape = (size, *self.dim) if isinstance(self.dim, tuple) else (size, self.dim)
@@ -195,6 +198,7 @@ class ManyWell(base.Dataset):
     def __init__(self, dim=2, device='cpu'):
         super().__init__()
         self.device = device
+        self.reward = None
 
         self.data = torch.ones(dim, dtype=torch.float32).to(self.device)
         self.data_ndim = dim
@@ -267,6 +271,7 @@ class Funnel(base.Dataset):
     def __init__(self, dim=1, device='cpu'):
         self.dim = dim
         self.device=device
+        self.reward = None
 
     def sample(self, size: int):
         v = torch.randn(size, 1, device=self.device) * 3
@@ -309,7 +314,7 @@ class ClsRewardDist(base.Dataset):
 @registry.add(name="40gmm")
 class FortyGaussianMixture:
     def __init__(self, dim, device):
-        loc = (torch.rand((40, dim)) - 0.5) * 2 * 40
+        loc = (torch.rand((40, dim), device=device) - 0.5) * 2 * 40
         scale = torch.ones_like(loc).to(device)
         
         mixture_weights = torch.ones(loc.shape[0], device=loc.device)
@@ -320,7 +325,7 @@ class FortyGaussianMixture:
         self.means = loc
         self.covariance_matrices = [torch.diag(scale[i]) for i in range(self.nmode)]
         self.gmm = distributions.MixtureSameFamily(mix, modes)
-        self.gmm_weights = mix.probs.numpy()
+        self.reward = None
 
     def log_density(self, x, anneal_beta=1.0):
         return self.gmm.log_prob(x)

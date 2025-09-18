@@ -42,7 +42,10 @@ dependencies = [
     "torchvision==0.22.1",
     "tqdm==4.65.0",
     "transformers==4.53.1",
-    "wandb==0.21.0"
+    "wandb==0.21.0",
+    "seaborn",
+    "simple_parsing",
+    "lightning",
 ]
 
 [build-system]

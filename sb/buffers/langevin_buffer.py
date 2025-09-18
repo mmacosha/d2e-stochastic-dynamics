@@ -101,7 +101,7 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
         self.step_size = init_step_size
         
         self.log_density = p1.log_density
-        # self.reward = p1.reward
+        self.reward = p1.reward
 
         self.langevin_step_counter = 0
 

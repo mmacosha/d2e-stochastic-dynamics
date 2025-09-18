@@ -125,7 +125,7 @@ def main(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str,
                 buffer_config=config.buffer
             )
 
-        case 'd2e':
+        case 'd2e_img':
             sb_config = sb_samplers.D2ESBConfig(**config.sampler)
             sb_trainer = sb_samplers.D2ESB_IMG(
                 fwd_model=fwd_model,

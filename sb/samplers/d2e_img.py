@@ -76,7 +76,7 @@ class D2ESB_IMG(d2e.D2ESB):
         num_img_to_log = self.config.num_img_to_log
         real_img = self.p1.reward.generator(x0[:num_img_to_log]).cpu()
         img_dim = real_img.view(num_img_to_log, -1).shape[1]
-        image_shape = (num_img_to_log, ) + infer_shape(img_dim)
+        image_shape = (num_img_to_log, ) + d2e.infer_shape(img_dim)
         real_img_grid = make_grid(
             real_img.view(*image_shape), nrow=6, normalize=True
         )
@@ -100,9 +100,9 @@ class D2ESB_IMG(d2e.D2ESB):
         images, probas, classes = self.p1.reward.get_target_class_images(
             output, num_img_to_log
         )
-        images = complete_tensor(images, num_img_to_log)
-        probas = complete_tensor(probas, num_img_to_log)
-        classes = complete_tensor(classes, num_img_to_log)
+        images = d2e.complete_tensor(images, num_img_to_log)
+        probas = d2e.complete_tensor(probas, num_img_to_log)
+        classes = d2e.complete_tensor(classes, num_img_to_log)
         
         target_class_fig = utils.plot_annotated_images(
             images.clip(0, 1).cpu().view(image_shape), (probas, classes),

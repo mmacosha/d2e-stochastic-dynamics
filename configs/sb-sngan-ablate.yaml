@@ -1,0 +1,23 @@
+defaults:
+  - _self_
+  - /data@data.p_0: d128normal
+  - /data@data.p_1: cifar10-sngan
+  - /models@models.fwd: d128
+  - /models@models.bwd: d128
+  - sampler: d2e-sngan
+  - buffer: decoupled_langevin
+
+exp:
+  id: null
+  resume: allow
+  name: osb
+  project: ablate-osb
+  mode: online
+
+hydra:
+  run:
+    dir: "."
+  output_subdir: null
+  job_logging:
+    disable_existing_loggers: true
+  verbose: false

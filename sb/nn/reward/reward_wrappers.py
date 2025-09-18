@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import torch
 import torchvision 
 from torch import nn
@@ -7,14 +9,16 @@ from transformers import ViTForImageClassification, ViTImageProcessor
 # from efficientvit.ae_model_zoo import DCAE_HF
 
 import sys, os
-# sys.path.append("./external/sg3")
-# sys.path.append("./external/cifar10_cls")
-# sys.path.append(os.path.abspath("./external/sngan"))
+sys.path.append(os.path.abspath("./external/sg3"))
+sys.path.append(os.path.abspath("./external/sngan"))
+sys.path.append(os.path.abspath("./external/celeba_cls"))
+sys.path.append(os.path.abspath("./external/cifar10_cls"))
 
-# import dnnlib, legacy
-# import cifar10_models.vgg as vgg
-# import cifar10_models.resnet as resnet
-# import external.sngan.models.sngan_cifar10 as sngan_model
+import dnnlib, legacy
+import cifar10_models.vgg as vgg
+import cifar10_models.resnet as resnet
+import external.sngan.models.sngan_cifar10 as sngan_model
+from external.celeba_cls.lightningmodules.classification import Classification
 
 from .utils import rgb_to_3ch_grey, AttrDict
 
@@ -70,6 +74,31 @@ class StyleGanWrapper(nn.Module):
 
 
 # -------------------------------- Classifier Wrappers ------------------------------- #
+
+
+@dataclass
+class CelebaClsInferenceParameters:
+    model_name = "resnet50"
+    pretrained = True
+    n_classes = 40 
+    ckpt_path = os.path.join(os.getcwd(), "weights/celeba_resnet.ckpt") 
+    output_root = os.path.join(os.getcwd(), "output")
+
+
+class CelebAClsWrapper(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.params = CelebaClsInferenceParameters()
+        self.model = Classification(self.params, None)
+        
+        self.transform = v2.Compose([
+            v2.Lambda(lambda x: x * 0.5 + 0.5),  # Rescale to [0, 1]
+            v2.Normalize([0.4914, 0.4822, 0.4465], [0.2471, 0.2435, 0.2616])
+        ])
+
+    def forward(self, x):
+        x = self.transform(x)
+        return self.model(x)
 
 
 class ViTClsWrapper(nn.Module):

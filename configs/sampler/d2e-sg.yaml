@@ -1,4 +1,4 @@
-name: d2e
+name: d2e_img
 device: cuda:0
 
 # logging
@@ -20,9 +20,10 @@ fwd_ema_decay: 0.0
 bwd_ema_decay: 0.0
 
 # ref process
-dt: 0.04
+dt: 0.01
 alpha: 0.0
 n_steps: 20
+var: 2.0
 t_max: ${mul:${sampler.dt}, ${sampler.n_steps}}
 
 # policy

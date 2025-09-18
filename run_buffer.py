@@ -40,7 +40,7 @@ def read_container(ctx, param, values):
 @click.option("--n_cols",       "n_cols",               default=4,          type=click.INT)
 @click.option("--anneal",       "anneal_value",         default=0.1,        type=click.FLOAT)
 @click.option("--steps",        "num_langevin_steps",   default=500,        type=click.INT)
-@click.option("--plot_size",    "plot_size",            default=36,         type=click.INT)
+@click.option("--plot_size",    "plot_size",            default=16,         type=click.INT)
 def main(device: int, gen: str, cls_: str, classes, mode: str, 
          dim: int,  buffer_size: int, ema_lambda: float, beta_fn: str,
          init_step_size: float,  anneal_value: float, n_cols: int,
@@ -79,10 +79,12 @@ def main(device: int, gen: str, cls_: str, classes, mode: str,
         device=device,
         beta_fn=beta_fn,
         log_hist=True,
+        log_langevin=True,
     )
     name = "--".join([
         f"{gen=}",
         f"{cls_=}",
+        f"{classes=}",
         f"num_steps={num_langevin_steps}",
         f"step_size={init_step_size}",
         f"step_size_annealing={anneal_value}",

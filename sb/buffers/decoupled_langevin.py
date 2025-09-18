@@ -35,6 +35,18 @@ class DecoupledLangevinBuffer(LangevinReplayBuffer):
             shape = (self.size, *dim) \
                 if isinstance(dim, (tuple, list)) else (self.size, dim)
             x = torch.randn(shape, device=self.device)
+
+            # init_from_noised_true_samples = False
+            # proba_thrsh = 0.7
+            # if init_from_noised_true_samples:
+            #     x = []
+            #     while len(x) < self.size:
+            #         z = torch.randn(shape, device=self.device)
+            #         probas = self.reward(z)['probas']
+                    
+            #         chosed_idxs = z[probas[:, self.reward.target_classes]] > proba_thrsh
+            #         chosed_idxs = chosed_idxs.float().sum(dim=1) > 0 
+
         else:
             x = torch.cat(self.buffer, dim=0)
             self.buffer.clear()

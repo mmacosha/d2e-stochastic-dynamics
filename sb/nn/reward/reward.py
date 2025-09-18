@@ -9,7 +9,8 @@ from .utils import REWARD_FUNCTIONS
 from .reward_wrappers import (
     StyleGanWrapper, DCAEWrapper, 
     CIFAR10ClsWrapper, ViTClsWrapper,
-    ImageNetClsWrapper, CIFAR10SNGANWrapper
+    ImageNetClsWrapper, CIFAR10SNGANWrapper,
+    CelebAClsWrapper
 )
 
 
@@ -24,7 +25,7 @@ class ClsReward(nn.Module):
                 f"Unknown reward type: {reward_type}. "
                 f"Chose from {list(REWARD_FUNCTIONS.keys())}."
             )
-        assert classifier_type != "celeba-cls-256", "This cls is not supported."
+        # assert classifier_type != "celeba-cls-256", "This cls is not supported."
         self.classifier_type = classifier_type
         self.reward_type = reward_type
         self.reward_fn = REWARD_FUNCTIONS[reward_type]
@@ -41,7 +42,7 @@ class ClsReward(nn.Module):
         x_pred = self.generator(latents)
         logits = self.classifier(x_pred) / beta
         
-        if self.classifier_type in {"celeba-cls-64", "celeba-cls-32"}:
+        if self.classifier_type.startswith("celeba"):
             all_probas = nn.functional.sigmoid(logits)
             probas, classes = all_probas.max(dim=1)
         else:
@@ -186,7 +187,10 @@ class ClsReward(nn.Module):
         elif classifier_type in {"cifar10-vgg13", "cifar10-vgg19", 
                                  "cifar10-resnet18", "cifar10-resnet50"}:
             classifier = CIFAR10ClsWrapper(classifier_type)    
-        
+
+        elif classifier_type == "celeba-cls-256":
+            classifier = CelebAClsWrapper()
+
         elif classifier_type == "celeba-cls-64":
             checkpoint_path = f"{reward_dir}/rewards/celeba/celeba-cls-64x64.pth"
             ckpt = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
