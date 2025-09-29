@@ -7,9 +7,10 @@ from sb.nn.celeba import CelebaCls
 
 from .utils import REWARD_FUNCTIONS
 from .reward_wrappers import (
-    StyleGanWrapper, DCAEWrapper, 
-    CIFAR10ClsWrapper, ViTClsWrapper,
-    ImageNetClsWrapper, CIFAR10SNGANWrapper,
+    StyleGanWrapper, 
+    CIFAR10ClsWrapper,
+    ImageNetClsWrapper, 
+    CIFAR10SNGANWrapper,
     CelebAClsWrapper
 )
 
@@ -25,7 +26,6 @@ class ClsReward(nn.Module):
                 f"Unknown reward type: {reward_type}. "
                 f"Chose from {list(REWARD_FUNCTIONS.keys())}."
             )
-        # assert classifier_type != "celeba-cls-256", "This cls is not supported."
         self.classifier_type = classifier_type
         self.reward_type = reward_type
         self.reward_fn = REWARD_FUNCTIONS[reward_type]
@@ -139,9 +139,6 @@ class ClsReward(nn.Module):
             )
             generator = StyleGanWrapper(checkpoint)
 
-        elif generator_type == "dc-ae-imagenet":
-            generator = DCAEWrapper("mit-han-lab/dc-ae-f32c32-in-1.0")
-
         elif generator_type == "cifar10-sngan":
             generator = CIFAR10SNGANWrapper()
 
@@ -167,7 +164,7 @@ class ClsReward(nn.Module):
             )
 
         if classifier_type == 'cifar10-cls':
-            assert 0, "Normalisation is not handled in this classifier."
+            raise ValueError("Normalisation is not handled in this classifier.")
             classifier = CifarCls()
             ckpt = torch.load(
                 f'{reward_dir}/rewards/cifar10/cifar10-cls.pt', 
@@ -176,7 +173,7 @@ class ClsReward(nn.Module):
             classifier.load_state_dict(ckpt)
         
         elif classifier_type == 'mnist-cls':
-            assert 0, "Normalisation is not handled in this classifier."
+            raise ValueError("Normalisation is not handled in this classifier.")
             ckpt = torch.load(
                 f'{reward_dir}/rewards/mnist/mnist-cls.pth', 
                 map_location='cpu', weights_only=True
@@ -199,16 +196,6 @@ class ClsReward(nn.Module):
 
         elif classifier_type == "imagenet":
             classifier = ImageNetClsWrapper()
-
-        elif classifier_type == "faces-gender":
-            classifier = ViTClsWrapper(
-                "rizvandwiki/gender-classification",
-            )
-        elif classifier_type == "faces-emotions":
-            classifier = ViTClsWrapper(
-                "trpakov/vit-face-expression",
-                to_grey=True
-            )
         else:
             raise NotImplementedError(f"Unknown classifier type: {classifier_type}")
         

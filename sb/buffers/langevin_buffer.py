@@ -9,13 +9,7 @@ import functools
 from tqdm.auto import trange
 import matplotlib.pyplot  as plt
 
-from sb.utils import import_conditionally
 from . import simple_buffer
-
-import_conditionally('external/hamiltorch', ['hamiltorch'])
-
-# sys.path.append('external/hamiltorch')
-# import hamiltorch
 
 
 def compute_grad(fn, x):
@@ -60,9 +54,7 @@ def mala_step(fn, x, dt):
 
     logp_y, grad_logp_y = compute_grad(fn, y)
 
-    adj = mala_correction(x, logp_x, grad_logp_x, 
-                            y, logp_y, grad_logp_y, 
-                            dt)
+    adj = mala_correction(x, logp_x, grad_logp_x, y, logp_y, grad_logp_y, dt)
     x[adj] = y[adj]
     return x
 
@@ -105,27 +97,7 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
 
         self.langevin_step_counter = 0
 
-    def run_sampler(self, x):
-        if self.sampler == 'hmc':
-            x0 = x[0]
-            size = x.size(0)
-
-            def _log_gensity(x):
-                x = x.reshape(1, -1)
-                density = self.log_density(x)
-                return density[0]
-
-            xt = hamiltorch.sample(
-                log_prob_func=_log_gensity, 
-                params_init=x0,  
-                num_samples=(size * self.hmc_freq), 
-                step_size=self.init_step_size, 
-                num_steps_per_sample=15,
-                sampler=hamiltorch.Sampler.HMC, 
-                integrator=hamiltorch.Integrator.IMPLICIT,
-            )
-            return torch.stack(xt[::self.hmc_freq])
- 
+    def run_sampler(self, x): 
         prev_z = None
         dt = self.step_size
         anneal_alpha = math.exp(math.log(self.anneal_value) / self.num_steps)
@@ -180,16 +152,6 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
             self.langevin_step_counter += 1
         
         return x
-    
-    def resample_propto_reward(self, x):
-        with torch.no_grad():
-            rwd = self.reward.reward(x)
-            probas = rwd / rwd.sum()
-            chosen_idx = torch.multinomial(
-                probas, num_samples=probas.size(0), 
-                replacement=False
-            )
-        return x[chosen_idx]
 
     def sample(self, batch_size, dim=None):
         if self.sampler == "legacy":
@@ -216,6 +178,5 @@ class LangevinReplayBuffer(simple_buffer.ReplayBuffer):
                 x[-noise_size:] = torch.randn(noise_size, *x.shape[1:], device=x.device)
             
             x = self.run_sampler(x)
-            # x = self.resample_propto_reward(x)
-                
+
         return x

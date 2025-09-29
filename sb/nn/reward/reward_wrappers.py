@@ -37,16 +37,6 @@ class CIFAR10SNGANWrapper(nn.Module):
         return self.model(x)
 
 
-class DCAEWrapper(nn.Module):
-    def __init__(self, model: str):
-        super().__init__()
-        self.model = DCAE_HF.from_pretrained(model)
-
-    def forward(self, x):
-        x = self.model.decode(x)
-        return x
-
-
 class StyleGanWrapper(nn.Module):
     def __init__(self, checkpoint: str):
         super().__init__()
