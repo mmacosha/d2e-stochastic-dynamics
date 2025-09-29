@@ -8,7 +8,7 @@ authors = [
 ]
 readme = "README.md"
 license = { text = "MIT", code = "MIT" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
 dependencies = [
     "einops==0.8.1",
@@ -43,9 +43,10 @@ dependencies = [
     "tqdm==4.65.0",
     "transformers==4.53.1",
     "wandb==0.21.0",
-    "seaborn",
-    "simple_parsing",
-    "lightning",
+    "timm==1.0.20",
+    "seaborn==0.13.2",
+    "simple_parsing==0.1.7",
+    "lightning==2.5.5",
 ]
 
 [build-system]
@@ -56,7 +57,10 @@ build-backend = "hatchling.build"
 packages = ["sb"]
 
 [project.scripts]
-train = "train:main"
+train = "py_scripts.train:main"
+run_buffer = "py_scripts.run_buffer:main"
+gen_sb_images = "py_scripts.generate_sb_images:main"
+get_per_class_images = "py_scripts.generate_per_class_images:main"
 
 [project.optional-dependencies]
 cuda = [

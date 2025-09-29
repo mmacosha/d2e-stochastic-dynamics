@@ -22,12 +22,6 @@ def read_overrides(overrides):
 
 
 def seed_everything(seed: int = 42):
-    """
-    Set random seeds for reproducibility across Python, NumPy, and PyTorch (CPU & CUDA).
-
-    Args:
-        seed (int): Random seed to use.
-    """
     # Python's built-in RNG
     random.seed(seed)
 
@@ -48,20 +42,20 @@ def seed_everything(seed: int = 42):
 
     # Environment variables for reproducibility
     os.environ["PYTHONHASHSEED"] = str(seed)
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"  # required for reproducibility with cuBLAS
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 
     print(f"Seed set to {seed} (deterministic mode ON)")
 
 
 @click.command()
-@click.option('--cfg_path',     "cfg_path",  type=click.Path(exists=True), default='configs')
-@click.option("--cfg",          "cfg",       type=click.STRING, default='config')
+@click.option('--cfg_path',     "cfg_path",  type=click.Path(), default='../configs')
+@click.option("--cfg",          "cfg",       type=click.STRING, default="config")
 @click.option("--name",         "name",      type=click.STRING, default=None)
 @click.option("--run_id",       "run_id",    type=click.STRING, default=None)
-@click.option("--wandb",        "wandb",     type=click.STRING, default='online')
+@click.option("--wandb",        "wandb",     type=click.STRING, default="online")
 @click.option("--device",       "device",    type=click.STRING, default=0)
-@click.option("--seed",         "seed",      type=click.INT, default=42 )
-@click.option("--debug",        "debug",     type=click.BOOL, default=False, is_flag=True)
+@click.option("--seed",         "seed",      type=click.INT,    default=42 )
+@click.option("--debug",        "debug",     type=click.BOOL,   is_flag=True)
 @click.option("--overrides",    "overrides", type=click.STRING, default=None,)
 def main(cfg_path: str, cfg: str, name: str, run_id: str,  wandb: str, 
          device: int, seed: int, debug: bool, overrides=None):
