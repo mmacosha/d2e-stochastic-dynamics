@@ -153,6 +153,9 @@ class D2ESB_IMG(d2e.D2ESB):
         run.log(logging_dict)
         plt.close("all")
 
+    @torch.no_grad()
+    def log_backward_step(self, it, run):
+        pass
 
     @torch.no_grad()
     def log_final_metric(self, run):
@@ -169,11 +172,6 @@ class D2ESB_IMG(d2e.D2ESB):
             return_timesteps=False, 
             method=self.config.matching_method
         )
-        x1_true = self.p1.sample(self.config.metric_batch_size).to(self.config.device)
-        
-        W2 = metrics.compute_w2_distance(
-            x1_true,  x1_pred.to(self.config.device)
-        )
         path_kl = metrics.compute_path_kl(
             self.fwd_model, 
             x0, dt, t_max, n_steps, self.config.alpha, self.config.var,
@@ -181,10 +179,21 @@ class D2ESB_IMG(d2e.D2ESB):
         )
         x0_x1_transport_cost = (x1_pred - x0).pow(2).sum(1).mean()
         final_metrics = {
-            "p1_W2": W2,
             "Path_KL": path_kl,
             "x0_x1_transport_cost": x0_x1_transport_cost,
         }
+
+        try:
+            x1_true = self.p1.sample(
+                self.config.metric_batch_size
+            ).to(self.config.device)
+            W2 = metrics.compute_w2_distance(
+                x1_true,  x1_pred.to(self.config.device)
+            )
+            final_metrics["p1_W2"] = W2
+
+        except NotImplementedError:
+            pass
 
         wandb.log(final_metrics)
 

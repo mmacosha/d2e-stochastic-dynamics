@@ -1,5 +1,5 @@
 name: d2e_img
-device: cuda:0
+device: 0
 
 # logging
 save_checkpoint_freq: 5
@@ -33,4 +33,5 @@ t_max: ${mul:${sampler.dt}, ${sampler.n_steps}}
 n_trajectories: 2
 start_mixed_from: 0
 off_policy_fraction: 0.8
+off_policy_fraction_anneal_rate: 0.1
 reuse_bwd_trajectory: false

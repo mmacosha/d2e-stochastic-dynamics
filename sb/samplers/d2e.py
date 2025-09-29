@@ -17,6 +17,8 @@ from sb.buffers import ReplayBuffer, LangevinReplayBuffer, DecoupledLangevinBuff
 from . import utils as sutils
 from . import base_class
 
+from omegaconf import OmegaConf
+
 
 def infer_shape(dim):
     if int(math.sqrt(dim))**2 == dim:
@@ -44,6 +46,8 @@ class D2ESBConfig(base_class.SBConfig):
     n_trajectories: int = 2
     num_img_to_log: int = 36
     off_policy_fraction: float = 0.25
+    off_policy_fraction_anneal_rate: float = 1.0
+    
     start_mixed_from: int = 0
     watch_models: bool = False
     anneal_beta_fn: str = None
@@ -63,6 +67,10 @@ class D2ESBConfig(base_class.SBConfig):
 class D2ESB(base_class.SB):
     def __init__(self, fwd_model, bwd_model, p0, p1, config, buffer_config):
         super().__init__(fwd_model, bwd_model, p0, p1, config)
+
+        # print(self.config)
+        # assert 0
+
         self.buffer_config = buffer_config
         self.anneal_beta_fn = eval(self.config.anneal_beta_fn) \
             if self.config.anneal_beta_fn else None
@@ -125,6 +133,13 @@ class D2ESB(base_class.SB):
         batch_size = self.config.batch_size
         n_trajectories = self.config.n_trajectories
 
+        if self.config.off_policy_fraction_anneal_rate < 1:
+            pow_ = sb_iter / self.config.num_sb_steps
+            anneal_rate = self.config.off_policy_fraction_anneal_rate ** pow_
+            off_policy_fraction = self.config.off_policy_fraction * anneal_rate
+        else:
+            off_policy_fraction = self.config.off_policy_fraction
+
         self.bwd_model_ema.apply()
         for step_iter in trange(self.config.num_fwd_steps, 
                                 leave=False, desc=f'It {sb_iter} | Forward'):
@@ -137,7 +152,7 @@ class D2ESB(base_class.SB):
 
             # run langevin on p1
             if self.buffer_config.buffer_type == "decoupled_langevin" \
-                and self.config.off_policy_fraction > 0.0:
+                and off_policy_fraction > 0.0:
                 self.p1_buffer.run_langevin(hdim)
 
             # compute beta for forward sampler
@@ -147,7 +162,7 @@ class D2ESB(base_class.SB):
 
             # compute off-policy x0
             bwd_traj_log_diff = None
-            if self.config.off_policy_fraction == 1.0:
+            if off_policy_fraction == 1.0:
                 x1 = self.p1_buffer.sample(_batch_size, hdim).to(device)
                 if self.config.reuse_bwd_trajectory:
                     density_fn = functools.partial(
@@ -164,12 +179,10 @@ class D2ESB(base_class.SB):
                         only_last=True
                     )
 
-            elif self.config.off_policy_fraction > 0 and sb_iter > 0:
-                num_off_policy_samples = int(
-                    self.config.off_policy_fraction * (_batch_size)
-                )
+            elif off_policy_fraction > 0 and sb_iter > 0:
+                num_off_policy_samples = int(off_policy_fraction * _batch_size)
                 x1 = self.p1_buffer.sample(num_off_policy_samples, hdim).to(device)
-                
+
                 if self.config.reuse_bwd_trajectory:
                     density_fn = functools.partial(
                         self.p1.log_density, anneal_beta=beta
@@ -292,7 +305,7 @@ class D2ESB(base_class.SB):
             )
         else:
             x1 = self.p1_buffer.sample(
-                self.config.val_batch_size
+                self.config.val_batch_size or 512
             ).to(self.config.device)
 
         trajectory, timesteps = sutils.sample_trajectory(

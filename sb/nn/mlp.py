@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+from sb import samplers
 from sb.nn.modules import Block, Module
 from sb.nn.utils import ModelOutput, fourier_proj
 

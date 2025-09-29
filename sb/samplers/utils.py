@@ -51,7 +51,7 @@ def sample_trajectory(
             t_ = t / t_max
             dt_ = 1 / num_steps
 
-            output = fwd_model(x, t_)
+            output = model(x, t_)
             if direction == "fwd":
                 drift = output.drift + output.log_var
                 x = x + drift * dt_ + math.sqrt(var_ * dt_) * torch.randn_like(drift)

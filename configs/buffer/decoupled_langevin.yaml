@@ -9,5 +9,5 @@ num_langevin_steps: 500
 noise_start_ratio: 0.5
 # beta_fn: 'lambda i: 0.08'
 log_langevin: false
-beta_fn: 'lambda it: 1.9 * math.exp(-it * 8 / 500) + 0.1'
+beta_fn: 'lambda it: 1.2 * math.exp(-it * 8 / 500) + 0.1'
 hmc_freq: 4

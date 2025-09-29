@@ -45,7 +45,8 @@ def main(device: int, gen: str, cls_: str, classes, mode: str,
          dim: int,  buffer_size: int, ema_lambda: float, beta_fn: str,
          init_step_size: float,  anneal_value: float, n_cols: int,
          num_langevin_steps: int, plot_size: int):
-    
+
+    beta_fn = f'lambda it: 1.2 * math.exp(-it * 8 / {num_langevin_steps}) + 0.1'
     config = {
         "device": device,
         "gen": gen,

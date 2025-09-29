@@ -69,7 +69,7 @@ class StyleGanWrapper(nn.Module):
             (latents.shape[0], self.G.c_dim), 
             device=latents.device
         )
-        x = self.G(latents, c, noise_mode='const')
+        x = self.G(latents, c, truncation_psi=0.9, noise_mode='random')
         return x
 
 

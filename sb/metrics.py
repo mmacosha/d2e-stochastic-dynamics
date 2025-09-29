@@ -51,7 +51,8 @@ def compute_w2_distance(true, pred, *args, **kwargs):
 def compute_path_kl(
         fwd_model, 
         x0, dt, t_max, n_steps, alpha, var, 
-        method="ll"
+        method="ll",
+        apply_averaging: bool = True,
     ):
     x = x0.clone()
     path_kl = 0.0
@@ -113,6 +114,9 @@ def compute_path_kl(
             (fwd_var + (fwd_mean - ref_mean).pow(2)) / ref_var - 1.0,
             dim=1
         )
-        path_kl += one_step_kl.mean()
+        if apply_averaging:
+            one_step_kl = one_step_kl.mean()
+        
+        path_kl += one_step_kl
 
-    return path_kl.mean()
+    return path_kl

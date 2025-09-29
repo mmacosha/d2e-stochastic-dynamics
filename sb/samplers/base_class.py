@@ -81,11 +81,18 @@ def find_checkpoint(wandb_dir: str, checkpoint_num: int, run_id: str) -> tuple[s
     if not previous_run_with_same_id:
         return None, -1
     
+    final_checkpoint = None
     possible_checkpoints = []
     for possible_run_dir in previous_run_with_same_id:
         checkpoints_path = possible_run_dir / "files" / "checkpoints"
         for ckpt in checkpoints_path.glob("checkpoint-*.pth"):
+            if ckpt.name == "checkpoint-final.pth":
+                final_checkpoint = ckpt
+
             possible_checkpoints.append(ckpt)
+
+    if final_checkpoint is not None:
+        return final_checkpoint, float('inf')
 
     if not possible_checkpoints:
         return None, -1

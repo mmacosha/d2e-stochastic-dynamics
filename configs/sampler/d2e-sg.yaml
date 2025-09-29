@@ -1,5 +1,5 @@
 name: d2e_img
-device: cuda:0
+device: 0
 
 # logging
 save_checkpoint_freq: 5
@@ -8,12 +8,15 @@ log_bwd_freq: 1
 
 # training
 batch_size: 128
+val_batch_size: 128
+metric_batch_size: 128
+
 matching_method: ll
 backward_first: true
 num_sb_steps: 500
-fwd_optim_lr: 5e-4
-bwd_optim_lr: 5e-4
-anneal_beta_fn: 'lambda it, n: 1.42 * math.exp(-it * 16 / n) + 0.08'
+fwd_optim_lr: 2e-4
+bwd_optim_lr: 2e-4
+anneal_beta_fn: 'lambda it, n: 1.2 * math.exp(-it * 10 / n) + 0.1'
 num_fwd_steps: 500
 num_bwd_steps: 100
 fwd_ema_decay: 0.0
@@ -30,3 +33,5 @@ t_max: ${mul:${sampler.dt}, ${sampler.n_steps}}
 n_trajectories: 2
 start_mixed_from: 0
 off_policy_fraction: 0.8
+off_policy_fraction_anneal_rate: 0.1
+reuse_bwd_trajectory: false
