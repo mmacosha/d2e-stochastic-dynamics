@@ -5,6 +5,7 @@
 **/.ipynb_checkpoints
 
 ./data
+notebooks
 notebooks/data
 
 runs/
