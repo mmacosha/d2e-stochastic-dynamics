@@ -1,0 +1,12 @@
+[submodule "external/sg3"]
+	path = external/sg3
+	url = https://github.com/NVlabs/stylegan3.git
+[submodule "external/sngan"]
+	path = external/sngan
+	url = https://github.com/GongXinyuu/sngan.pytorch.git
+[submodule "external/cifar10_cls"]
+	path = external/cifar10_cls
+	url = https://github.com/huyvnphan/PyTorch_CIFAR10.git
+[submodule "external/celeba_cls"]
+	path = external/celeba_cls
+	url = https://github.com/clementapa/CelebFaces_Attributes_Classification.git

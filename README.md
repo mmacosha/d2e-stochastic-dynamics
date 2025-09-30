@@ -20,7 +20,6 @@
 * [2D experiments](#-2d-experiments)
 * [Image experiments](#-image-experiments)
 * [Citation](#-citation)
-* [Acknowledgements](#-acknowledgements)
 ---
 
 ## Project structure
@@ -96,7 +95,6 @@ train --cfg=sb-sg --device=0 --wandb=online --name=EXPERIMENT-NAME \
       --overrides="data.p_1.args.target_classes=[5],sampler.off_policy_fraction=0.8"
 ```
 
-
 ## Citation
 Please, cite this work as follows
 ```
@@ -107,5 +105,3 @@ Please, cite this work as follows
     notes     = {Submitted to ICLR 2026.}
 }
 ```
-##
-Acknowledgements
