@@ -16,3 +16,5 @@ wandb/
 assets/
 outputs/
 sb-ebm/
+
+assets/*.numbers

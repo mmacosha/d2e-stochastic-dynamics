@@ -87,9 +87,10 @@ To reproduce image experiments you would need to install the following models
 3. [CIFAR-10 Classifier](https://github.com/huyvnphan/PyTorch_CIFAR10)
 <!-- 4. [CelebA Classifier]() -->
 
-All models should be installed into the `sb/external`
+All models should be installed into the `sb/external`. It is possible to load these dependences using 
+`git clone --recurse-submodules`, however, some modifications to the code (mostly paths for imports) might be needed.
 
-The experiment can be run as follows: 
+The experiments can be run as follows: 
 ```bash
 train --cfg=sb-sg --device=0 --wandb=online --name=EXPERIMENT-NAME \
       --overrides="data.p_1.args.target_classes=[5],sampler.off_policy_fraction=0.8"
