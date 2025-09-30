@@ -57,19 +57,16 @@ Here's how you can install this repository and reproduce the experiments
 # If not, follow the link above to install it or use a package mangaer of your choice.
 
 # 1. Clone the repository into a folder named 'sb' and navigate into it
-git clone git@github.com:mmacosha/energy-sb.git sb
+git https://github.com/mmacosha/d2e-stochastic-dynamics.git sb
 cd sb
 
-# 2. Check out the specific branch for the ICLR 2026 version
-git checkout iclr-2026
-
-# 3. Create a virtual environment using Python 3.11 with uv
+# 2. Create a virtual environment using Python 3.11 with uv
 uv venv -n sbenv --python 3.11
 
-# 4. Activate the newly created virtual environment
+# 3. Activate the newly created virtual environment
 source ./sbenv/bin/activate
 
-# 5. Install the project and all its dependencies in editable mode
+# 4. Install the project and all its dependencies in editable mode
 pip install -e .
 ```
 
