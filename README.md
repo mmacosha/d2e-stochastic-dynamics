@@ -1,7 +1,7 @@
 # Data-to-Energy Stochastic Dynamics
 
 <p align="center">
-    🌐 <a href="https:" target="_blank">Website</a> | 📃 <a href="https://arxiv.org/abs/" target="_blank">Paper</a>  <br>
+      📃 <a href="https://arxiv.org/abs/2509.26364" target="_blank">Paper</a>  <br>
 </p>
 
 <p align="center">
@@ -91,6 +91,6 @@ Please, cite this work as follows
     author    = {Tamogashev, Kirill and Malkin, Nikolay},
     title     = {Data-to-Energy Stochastic dynamics},
     year      = {2025},
-    notes     = {Submitted to ICLR 2026.}
+    notes     = {Published at 2026.}
 }
 ```
