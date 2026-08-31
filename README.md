@@ -88,7 +88,7 @@ train --cfg=sb-sg --device=0 --wandb=online --name=EXPERIMENT-NAME \
 Please, cite this work as follows
 ```
 @misc{tamogashev@d2edynamics,
-    author    = {Tamogashev, Kirill and Malkin, Nikolay},
+    author    = {Tamogashev, Kirill and Whitammer, Esmeralda},
     title     = {Data-to-Energy Stochastic dynamics},
     year      = {2025},
     notes     = {Published at 2026.}
